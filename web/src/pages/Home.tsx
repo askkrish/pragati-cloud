@@ -3,6 +3,7 @@ import { t } from '../i18n.ts';
 import { can, useApp } from '../main.tsx';
 import { KIND_LABEL, Link, Loading, useApi } from '../ui.tsx';
 import { OperationsPanel } from './Work.tsx';
+import { MoneyPanel } from './Money.tsx';
 
 export type TreeNode = { id: string; parent_id: string | null; kind: string; name: string; code: string | null; depth: number;
   sort_order: number; in_scope: boolean; units_here: number; units_total: number };
@@ -71,6 +72,8 @@ export function Home() {
     </section>}
 
     <OperationsPanel />
+
+    <MoneyPanel />
 
     {me.homes.length > 0 && <section>
       <header><h2>{t('Your homes')}</h2></header>

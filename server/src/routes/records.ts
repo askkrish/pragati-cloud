@@ -5,14 +5,14 @@ import { fail, forbidden, notFound } from '../errors.ts';
 import { saveUpload } from '../services/files.ts';
 import { idParam, z } from './z.ts';
 
-const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation'] as const;
+const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation', 'invoice', 'payment_proof'] as const;
 const OPS = ['operations.view', 'operations.update', 'operations.manage'];
 
 export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Services) {
   app.post('/api/files', async req => run.auth(req, async c => {
     const purpose = z.enum(PURPOSES).parse((req.query as Record<string, string>).purpose);
-    // Photos of work: staff, and owners or residents adding a photo to their own request.
-    if (purpose === 'work_photo') {
+    // Photos of work, and proof of a payment: staff, and owners or residents for their own home.
+    if (purpose === 'work_photo' || purpose === 'payment_proof') {
       const home = await one(c.tx, `select 1 from app.ownerships where person_id = $1 and ends_on is null
         union select 1 from app.occupancies where person_id = $1 and ends_on is null`, [c.actor.personId]);
       if (!home && !OPS.some(p => c.actor.canAnywhere(p))) forbidden();
@@ -20,6 +20,8 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
       if (!c.actor.canAnywhere('operations.manage')) forbidden();
     } else if (purpose === 'quotation') {
       if (!c.actor.canAnywhere('procurement.manage')) forbidden();
+    } else if (purpose === 'invoice') {
+      if (!c.actor.canAnywhere('finance.prepare') && !c.actor.can('finance.manage')) forbidden();
     } else c.actor.require('files.upload', null);
     const part = await req.file() ?? fail(400, 'Choose a file.', 'invalid');
     return saveUpload(c, svc.storage, part!, purpose);
@@ -36,6 +38,8 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
         || (f.purpose === 'other' && actor.canAnywhere('audit.view'))
         || (f.purpose === 'contract' && staff)
         || (f.purpose === 'quotation' && (actor.canAnywhere('procurement.view') || actor.canAnywhere('procurement.manage')))
+        || (['invoice', 'payment_proof'].includes(f.purpose) && (actor.can('finance.view') || actor.can('finance.manage')))
+        || (f.purpose === 'invoice' && actor.canAnywhere('finance.prepare'))
         || (f.purpose === 'work_photo' && (staff || !!await one(tx, `select 1 from app.work_updates u
               join app.work_orders w on w.tenant_id = u.tenant_id and w.id = u.work_order_id
              where u.file_id = $1 and (w.assignee_person_id = $2 or (w.raised_by = $2 and not u.staff_only))
@@ -67,7 +71,8 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
     'ownerships', 'occupancies', 'roles', 'memberships', 'committees', 'committee_seats', 'approval_rules',
     'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'assets', 'asset_contracts',
     'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'vendors', 'quotes', 'vendor_selections', 'vendor_reviews',
-    'files', 'audit_events'];
+    'finance_settings', 'ledger_accounts', 'journals', 'journal_lines', 'charge_plans', 'billing_runs', 'billing_run_lines', 'payment_claims',
+    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'files', 'audit_events'];
 
   app.get('/api/export', async (req, reply) => {
     const data = await run.auth(req, async ({ tx, actor, audit, tenant }) => {

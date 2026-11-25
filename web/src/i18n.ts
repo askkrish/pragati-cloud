@@ -10,7 +10,7 @@ const ta: Record<string, string> = {
   'Your homes': 'உங்கள் வீடுகள்', Units: 'வீடுகள்', Owners: 'உரிமையாளர்கள்', 'New request': 'புதிய கோரிக்கை',
   Search: 'தேடு', Approved: 'ஒப்புதல் பெற்றது', Pending: 'நிலுவையில்', Rejected: 'நிராகரிக்கப்பட்டது', Withdrawn: 'திரும்பப் பெறப்பட்டது',
   'Use a different number': 'வேறு எண்ணைப் பயன்படுத்து', Language: 'மொழி',
-  Work: 'பணிகள்', Requests: 'கோரிக்கைகள்', Today: 'இன்று',
+  Work: 'பணிகள்', Requests: 'கோரிக்கைகள்', Today: 'இன்று', Money: 'கணக்குகள்', Dues: 'நிலுவை',
 };
 const dict: Record<string, Record<string, string>> = { ta };
 

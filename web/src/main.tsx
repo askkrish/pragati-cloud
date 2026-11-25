@@ -11,6 +11,8 @@ import { ApprovalList, ApprovalNew, ApprovalView } from './pages/Approvals.tsx';
 import { Committees, PeopleList, PersonView } from './pages/People.tsx';
 import { Activity, MoreMenu, Roles, Rules, SettingsPage } from './pages/Settings.tsx';
 import { VendorList, VendorView } from './pages/Procurement.tsx';
+import { BankList, BankView, Billing, DuesList, MoneyHome, MoneySettings, MyDues, preparesVouchers, Reports, RunView, seesBooks, UnitStatement, Vouchers,
+  VoucherView } from './pages/Money.tsx';
 import { AssetList, AssetNew, AssetView, isStaff, Requests, RoutineList, RoutineNew, RoutineView, Today, WorkOrderNew, WorkOrders,
   WorkOrderView } from './pages/Work.tsx';
 
@@ -53,16 +55,22 @@ function Frame() {
   const { community, me } = useApp();
   const path = usePath().split('?')[0];
   const lang = useLang();
-  // Staff see the day's work; owners and residents see their own requests. People sits under More on phones.
-  const tabs: { to: string; label: string; icon: React.ReactNode; match: (p: string) => boolean; badge?: number; desktopOnly?: boolean }[] = [
+  // Staff see the day's work and the treasurer the books; owners and residents see their own requests and dues.
+  // On phones the bottom bar holds four tabs and More; the rest are on the side bar on larger screens, and under More.
+  type Tab = { to: string; label: string; icon: React.ReactNode; match: (p: string) => boolean; badge?: number; desktopOnly?: boolean };
+  const hasHome = me.homes.length > 0;
+  const tabs = ([
     { to: '/', label: t('Home'), icon: Icon.home, match: (p: string) => p === '/' },
     isStaff(me) ? { to: '/work', label: t('Work'), icon: Icon.work, match: (p: string) => p.startsWith('/work') }
-      : { to: '/requests', label: t('Requests'), icon: Icon.work, match: (p: string) => p.startsWith('/requests') || p.startsWith('/work') },
-    { to: '/approvals', label: t('Approvals'), icon: Icon.approve, match: (p: string) => p.startsWith('/approvals'), badge: me.waitingForMyVote },
-    { to: '/places', label: t('Places'), icon: Icon.plan, match: (p: string) => p.startsWith('/places') || p.startsWith('/units') },
-    { to: '/people', label: t('People'), icon: Icon.people, match: (p: string) => p.startsWith('/people') || p.startsWith('/committees'), desktopOnly: true },
-    { to: '/more', label: t('More'), icon: Icon.more, match: (p: string) => p.startsWith('/more') || p.startsWith('/settings') },
-  ];
+      : hasHome ? { to: '/requests', label: t('Requests'), icon: Icon.work, match: (p: string) => p.startsWith('/requests') || p.startsWith('/work') } : null,
+    seesBooks(me) || preparesVouchers(me) ? { to: '/money', label: t('Money'), icon: Icon.money, match: (p: string) => p.startsWith('/money') }
+      : hasHome ? { to: '/dues', label: t('Dues'), icon: Icon.money, match: (p: string) => p.startsWith('/dues') } : null,
+    can(me, 'approvals.view') || me.waitingForMyVote ? { to: '/approvals', label: t('Approvals'), icon: Icon.approve, match: (p: string) => p.startsWith('/approvals'),
+      badge: me.waitingForMyVote } : null,
+    can(me, 'property.view') ? { to: '/places', label: t('Places'), icon: Icon.plan, match: (p: string) => p.startsWith('/places') || p.startsWith('/units') } : null,
+    can(me, 'people.view') ? { to: '/people', label: t('People'), icon: Icon.people, match: (p: string) => p.startsWith('/people') || p.startsWith('/committees') } : null,
+  ].filter(Boolean) as Tab[]).map((tab, i): Tab => ({ ...tab, desktopOnly: i >= 4 }));
+  tabs.push({ to: '/more', label: t('More'), icon: Icon.more, match: (p: string) => p.startsWith('/more') || p.startsWith('/settings') });
 
   let page;
   const m = (re: RegExp) => re.exec(path);
@@ -90,6 +98,18 @@ function Frame() {
   else if (path === '/work/vendors') page = <VendorList />;
   else if ((r = m(/^\/work\/vendors\/([\w-]+)$/))) page = <VendorView id={r[1]} />;
   else if (path === '/requests') page = <Requests />;
+  else if (path === '/money') page = <MoneyHome />;
+  else if (path === '/money/dues') page = <DuesList />;
+  else if ((r = m(/^\/money\/units\/([\w-]+)$/))) page = <UnitStatement id={r[1]} />;
+  else if (path === '/money/billing') page = <Billing />;
+  else if ((r = m(/^\/money\/runs\/([\w-]+)$/))) page = <RunView id={r[1]} />;
+  else if (path === '/money/vouchers') page = <Vouchers />;
+  else if ((r = m(/^\/money\/vouchers\/([\w-]+)$/))) page = <VoucherView id={r[1]} />;
+  else if (path === '/money/bank') page = <BankList />;
+  else if ((r = m(/^\/money\/bank\/([\w-]+)$/))) page = <BankView id={r[1]} />;
+  else if (path === '/money/reports') page = <Reports />;
+  else if (path === '/money/settings') page = <MoneySettings />;
+  else if (path === '/dues') page = <MyDues />;
   else if (path === '/more') page = <MoreMenu />;
   else if (path === '/settings') page = <SettingsPage />;
   else if (path === '/settings/roles') page = <Roles />;

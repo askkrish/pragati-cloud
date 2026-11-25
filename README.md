@@ -41,6 +41,21 @@ Carried over from JAOA Pragati's daily operations, projects, service requests an
 | Choosing a vendor | A reason is always recorded; a single quotation needs a justification; lapsed quotations and blocked vendors cannot be chosen. The choice goes through the approval rules as "choosing a vendor", carrying the comparison. |
 | Reviews | Quality, time and value scores after the work is done; a low score needs a comment. |
 
+## Phase 2, module 3: finance
+
+Full books for each community, as agreed in the commercial plan, with export to Tally.
+
+| Area | What works |
+| --- | --- |
+| Books | Double entry with a standard chart per community (general, corpus and sinking funds; receivables kept per home). Every entry balances and is permanent; corrections are reversals. Closed periods and each bank account's reconciled-through date are enforced by the database itself. |
+| Billing | Plans by area (carpet, built-up, super built-up, plot or UDS), by kind of home, or a flat amount; monthly to yearly; for the whole community or one block or phase. A billing run is a draft until posted, and runs once per period. |
+| Dues | Each home's statement and balance; payments settle the oldest charges first; ageing in 30-day bands. Owners see their own homes only, pay by UPI with the amount filled in, and report payments with the UTR for the treasurer to confirm. |
+| Vouchers | Prepared by the facility manager, decided by the approval rules for spending, paid by the treasurer with TDS deducted where it applies. The same vendor invoice cannot be paid twice. |
+| Bank | Import a bank statement (CSV), match it automatically by reference and amount, match the rest by hand, then lock the account up to that day. |
+| Reports | Income and expenditure (also for one block), balance sheet, trial balance, cash and bank, dues by home, billing and collection, budget and actual, day book; each downloads for Excel. Tally ledgers and entries download as XML. |
+| Roles | A Treasurer role keeps the books; committees and auditors read them; facility managers prepare vouchers. |
+
+
 
 
 ## Running it locally
@@ -56,7 +71,7 @@ npm run build && PRAGATI_DEV_SHOW_OTP=1 npm start
 
 Open http://maple-court.localhost:8080, http://riverside-greens.localhost:8080 or http://palm-meadows.localhost:8080. Sign in as an administrator with 90000 10001, 90000 20001 or 90000 30001; in development the code is shown on screen. All sample data is invented.
 
-`npm test` runs 69 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
+`npm test` runs 81 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
 
 ## Layout
 

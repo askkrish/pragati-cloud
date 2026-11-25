@@ -80,7 +80,7 @@ small, .quiet { color: var(--ink-2); }
 
 .nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; background: var(--paper); border-top: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(5, 1fr); padding-bottom: env(safe-area-inset-bottom);
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding-bottom: env(safe-area-inset-bottom);
 }
 .nav a {
   display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 10px; text-decoration: none;
@@ -348,3 +348,17 @@ label.row.pick input { width: auto; min-height: 0; margin-right: 6px; accent-col
 details > summary { cursor: pointer; }
 table.compare .row-actions { display: flex; gap: 2px; margin: 4px 0 0 -8px; }
 table.compare .row-actions button { min-height: 32px; padding: 4px 8px; font-size: 0.92rem; }
+
+/* ---------- finance ---------- */
+.money-big { font-size: var(--step-2) !important; }
+.ageing { display: inline-flex; width: 120px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line-2); vertical-align: middle; margin-top: 4px; }
+.ageing i, .legend i[class^='age-'] { display: block; height: 100%; }
+.legend i[class^='age-'] { width: 14px; height: 10px; border-radius: 2px; }
+.age-current { background: var(--brand-mid); } .age-d30 { background: #e2b45c; } .age-d60 { background: #d98a3a; }
+.age-d90 { background: #c4612f; } .age-over90 { background: var(--stop); }
+tr.struck td { color: var(--ink-3); text-decoration: line-through; }
+td.small, .small { font-size: 0.88rem; }
+table.grid tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
+table.grid th.num, table.grid td.num { text-align: right; white-space: nowrap; }
+.rows.picks { margin-top: 6px; }
+.amount + .actions { margin-top: 4px; }
