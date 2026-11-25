@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ARM_CLIENT_ID: __CLIENT_ID__
-  ARM_TENANT_ID: __TENANT_ID__
+  ARM_CLIENT_ID: 0c469fd2-0924-44e5-a51a-60808d2be159
+  ARM_TENANT_ID: 2036fd27-cf23-457b-a0d1-70d810324981
   ARM_SUBSCRIPTION_ID: 326ad94b-cd4a-4d88-82eb-b931b1414725
   ARM_USE_OIDC: "true"
   TF_IN_AUTOMATION: "1"
