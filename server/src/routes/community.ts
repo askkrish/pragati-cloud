@@ -84,7 +84,7 @@ export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Se
   app.get('/api/settings', async req => run.auth(req, async ({ tx, actor }) => {
     if (!actor.canAnywhere('settings.manage') && !actor.canAnywhere('roles.manage')) forbidden();
     return one(tx, `select brand_name, platform_name, legal_name, registration_no, state, city, timezone, languages,
-      primary_color, assistant_name, logo_file_id, hosting_tier, slug from app.tenants`);
+      primary_color, assistant_name, logo_file_id, hosting_tier, slug, escalation_days from app.tenants`);
   }));
 
   app.patch('/api/settings', async req => run.auth(req, async ({ tx, actor, audit }) => {
@@ -97,6 +97,7 @@ export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Se
       languages: z.array(z.enum(LANGS)).min(1).max(6).optional(),
       primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
       assistantName: z.string().trim().min(2).max(40).optional(),
+      escalationDays: z.coerce.number().int().min(1).max(90).optional(),
     }).parse(req.body);
     if (b.brandName && /\bpragath?i\s*$/i.test(b.brandName))
       fail(400, 'Leave out "Pragati": the platform name adds it, as in "JAOA Pragati".', 'invalid');
@@ -105,10 +106,11 @@ export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Se
         brand_name = coalesce($1, brand_name), legal_name = coalesce($2, legal_name),
         registration_no = case when $3::boolean then $4 else registration_no end,
         city = case when $5::boolean then $6 else city end, languages = coalesce($7, languages),
-        primary_color = coalesce($8, primary_color), assistant_name = coalesce($9, assistant_name)
+        primary_color = coalesce($8, primary_color), assistant_name = coalesce($9, assistant_name),
+        escalation_days = coalesce($10, escalation_days)
       returning brand_name, platform_name, primary_color, languages`,
       [b.brandName ?? null, b.legalName ?? null, b.registrationNo !== undefined, b.registrationNo ?? null,
-        b.city !== undefined, b.city ?? null, b.languages ?? null, b.primaryColor ?? null, b.assistantName ?? null]);
+        b.city !== undefined, b.city ?? null, b.languages ?? null, b.primaryColor ?? null, b.assistantName ?? null, b.escalationDays ?? null]);
     clearTenantCache();
     await audit('settings.updated', 'tenant', null,
       before!.platform_name !== after!.platform_name ? `Renamed the platform to ${after!.platform_name}` : 'Updated community settings',

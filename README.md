@@ -68,6 +68,17 @@ Full books for each community, as agreed in the commercial plan, with export to 
 
 
 
+## Phase 2, module 6: project delivery and controls
+
+| Area | What works |
+| --- | --- |
+| Project delivery | Requests for quotation with the written scope, reply date and vendors asked. After the vendor choice is approved, the contract (never above the approved amount) and its signed copy; an agreement made before the platform can be recorded with a note. Change orders in amount and time go through the approval rules; the committed amount and finish date include only approved changes. Milestones with payments; paid and pending vouchers against the work. |
+| Handover | Tests, open defects, warranty, assets and a completion report, addressed to someone who looks after operations there. They accept it, which completes the work, or return it to be fixed. Contracted projects cannot be marked done any other way. |
+| Asset service log | Services, inspections, repairs and statutory checks with the outcome and next due date; a failed check can raise a work order in the same step. Assets due for service are listed. |
+| GST checks | The preparer records the vendor's GSTIN and invoice; only the treasurer verifies. A voucher with GST pending cannot be paid. A verified GSTIN fills in the vendor record. |
+| Permits | Owners mark requests that need the committee's permission (terrace drilling or cabling, renovation, moving). Work cannot start without a permit in force; the committee grants it with conditions and an end date, declines it, or revokes it, which stops work in progress. |
+| Ageing decisions | Approvals waiting longer than the community's setting (7 days unless changed) are flagged. |
+
 ## Phase 2, module 5: Ask Pragathi
 
 Questions in plain words, in English or Tamil, answered by Claude from the community's own records.

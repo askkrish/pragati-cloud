@@ -509,11 +509,13 @@ export async function financeRoutes(app: FastifyInstance, run: Runner, _svc: Ser
 
   // ================================================================ vouchers
   const VOUCHER_SQL = `select v.*, a.name as account, a.code as account_code, ${PLACE()} as place, w.ref as work_ref, w.title as work_title, vn.name as vendor,
+      vn.gstin as vendor_gstin, gp.full_name as gst_checked_by_name,
       p.full_name as prepared_by_name, r.ref as approval_ref, r.status as approval_status, j.ref as journal_ref, j.txn_date as paid_on, j.reference as paid_reference
     from app.vouchers v join app.ledger_accounts a on a.tenant_id = v.tenant_id and a.id = v.account_id
     join app.property_nodes n on n.tenant_id = v.tenant_id and n.id = v.node_id
     left join app.work_orders w on w.tenant_id = v.tenant_id and w.id = v.work_order_id
     left join app.vendors vn on vn.tenant_id = v.tenant_id and vn.id = v.vendor_id
+    left join app.people gp on gp.tenant_id = v.tenant_id and gp.id = v.gst_checked_by
     join app.people p on p.tenant_id = v.tenant_id and p.id = v.prepared_by
     left join app.approval_requests r on r.tenant_id = v.tenant_id and r.id = v.approval_request_id
     left join app.journals j on j.tenant_id = v.tenant_id and j.id = v.journal_id`;
@@ -533,7 +535,34 @@ export async function financeRoutes(app: FastifyInstance, run: Runner, _svc: Ser
     const v = await one(tx, `${VOUCHER_SQL} where v.id = $1`, [idParam.parse(req.params).id]) ?? notFound('That voucher');
     const state = voucherState(v);
     return { ...v, state, actions: { pay: canKeepBooks(actor) && state === 'to_pay',
-      cancel: (canKeepBooks(actor) || v.prepared_by === actor.personId) && ['awaiting_approval', 'to_pay', 'rejected', 'withdrawn'].includes(state) } };
+      cancel: (canKeepBooks(actor) || v.prepared_by === actor.personId) && ['awaiting_approval', 'to_pay', 'rejected', 'withdrawn'].includes(state),
+      gst: v.status !== 'cancelled' && v.status !== 'paid' && (canKeepBooks(actor) || v.prepared_by === actor.personId),
+      verifyGst: v.status !== 'cancelled' && canKeepBooks(actor) } };
+  }));
+
+  // GST checks, carried over from JAOA: the preparer records the GSTIN and invoice; the treasurer
+  // verifies them against the GST portal. A voucher marked "pending" cannot be paid until verified,
+  // or marked as GST not charged.
+  app.post('/api/finance/vouchers/:id/gst', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    const v = await one(tx, `${VOUCHER_SQL} where v.id = $1`, [idParam.parse(req.params).id]) ?? notFound('That voucher');
+    const keeper = canKeepBooks(actor);
+    if (!keeper && v.prepared_by !== actor.personId) forbidden();
+    if (v.status === 'cancelled' || (v.status === 'paid' && !keeper)) fail(409, 'This voucher is closed.', 'closed');
+    const b = z.object({ status: z.enum(['not_charged', 'pending', 'verified']),
+      gstin: z.string().trim().toUpperCase().regex(/^[0-9]{2}[A-Z0-9]{13}$/, 'a GSTIN has 15 characters, starting with the 2-digit state code').optional(),
+      invoiceNo: optText(60), note: z.string().trim().max(600).default('') }).parse(req.body);
+    if (b.status === 'verified' && !keeper) fail(403, 'The treasurer verifies GST. Save the GSTIN and invoice as pending for review.', 'forbidden');
+    if (b.status !== 'not_charged' && !b.gstin) fail(400, 'Enter the vendor\'s GSTIN.', 'invalid');
+    const invoice = b.invoiceNo ?? v.invoice_no;
+    if (b.status === 'verified' && !invoice) fail(400, 'Enter the invoice number that was checked.', 'invalid');
+    await tx.query(`update app.vouchers set gst_status = $2, gstin = $3, gst_note = $4, gst_checked_by = $5, gst_checked_at = $6,
+        invoice_no = coalesce($7, invoice_no) where id = $1`,
+      [v.id, b.status, b.status === 'not_charged' ? null : b.gstin, b.note || null, b.status === 'verified' ? actor.personId : null,
+        b.status === 'verified' ? new Date() : null, b.invoiceNo]);
+    if (b.status !== 'not_charged' && v.vendor_id && b.gstin)
+      await tx.query(`update app.vendors set gstin = $2 where id = $1 and gstin is null`, [v.vendor_id, b.gstin]);
+    await audit('finance.voucher_gst', 'voucher', v.id, `${v.ref}: GST ${b.status.replace('_', ' ')}${b.gstin ? ` (${b.gstin})` : ''}`, { note: b.note });
+    return { ok: true };
   }));
 
   // A voucher is decided by the approval rules for spending, by amount and place.
@@ -573,6 +602,7 @@ export async function financeRoutes(app: FastifyInstance, run: Runner, _svc: Ser
     if (voucherState(v) !== 'to_pay') fail(409, v.status === 'paid' ? 'This voucher has already been paid.' : 'This voucher has not been approved.', 'closed');
     const b = z.object({ accountId: uuid, date, mode: z.enum(MODES), reference: optText(100) }).parse(req.body);
     if (b.mode !== 'cash' && !b.reference) fail(400, 'Enter the UTR or cheque number.', 'invalid');
+    if (v.gst_status === 'pending') fail(409, 'Verify the vendor\'s GST first, or mark it as not charged.', 'gst_pending');
     const cash = await cashAccount(tx, b.accountId);
     const amount = Number(v.amount_paise), tds = Number(v.tds_paise);
     const lines = [{ accountId: v.account_id, debit: amount, nodeId: v.node_id, vendorId: v.vendor_id }, { accountId: cash.id, credit: amount - tds }];

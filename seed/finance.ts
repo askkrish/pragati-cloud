@@ -53,7 +53,9 @@ export async function seedFinance(tx: Tx, slug: string, seedNo: number) {
   const rand = () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const today = localNow('Asia/Kolkata').day;
   const fy = fyOf(today, 4);
-  const byName = async (n: string) => (await one(tx, `select id from app.people where full_name = $1 order by created_at limit 1`, [n]))?.id ?? fail(`no person ${n}`);
+  // Sample owners can share a name with a committee member: prefer the person who holds a committee seat.
+  const byName = async (n: string) => (await one(tx, `select p.id from app.people p where p.full_name = $1
+    order by exists (select 1 from app.committee_seats s where s.person_id = p.id and s.ends_on is null) desc, p.created_at limit 1`, [n]))?.id ?? fail(`no person ${n}`);
   const acc = async (code: string) => (await one(tx, `select id from app.ledger_accounts where code = $1`, [code]))!.id;
   const node = async (name: string | null) => name ? (await one(tx, `select id from app.property_nodes where name = $1`, [name]))!.id
     : (await one(tx, `select id from app.property_nodes where parent_id is null`))!.id;
@@ -272,3 +274,19 @@ async function approveAll(tx: Tx, id: string) {
 }
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 function fail(m: string): never { throw new Error(m); }
+
+// Earlier demo data gave the treasurer role to a sample owner who shares the treasurer's name.
+// Put it with the committee's treasurer, the person who signs in. Demo communities only.
+export async function fixDemoTreasurer(tx: Tx, slug: string) {
+  const c = CONFIG[slug];
+  if (!c) return;
+  const role = await one(tx, `select id from app.roles where key = 'treasurer'`);
+  const seated = await one(tx, `select p.id from app.people p where p.full_name = $1
+    and exists (select 1 from app.committee_seats s where s.person_id = p.id and s.ends_on is null) order by p.created_at limit 1`, [c.treasurer]);
+  if (!role || !seated) return;
+  await tx.query(`insert into app.memberships (person_id, role_id) values ($1, $2) on conflict do nothing`, [seated.id, role.id]);
+  const moved = await tx.query(`update app.memberships m set status = 'disabled', disabled_at = now() from app.people p
+    where m.person_id = p.id and m.role_id = $1 and m.status = 'active' and p.full_name = $2 and p.id <> $3
+      and not exists (select 1 from app.committee_seats s where s.person_id = p.id and s.ends_on is null)`, [role.id, c.treasurer, seated.id]);
+  if (moved.rowCount) console.log(`${slug}: treasurer role moved to the committee's treasurer`);
+}

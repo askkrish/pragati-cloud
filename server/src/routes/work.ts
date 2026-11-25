@@ -16,6 +16,20 @@ import { date, idParam, rupeesToPaise, text, uuid, z } from './z.ts';
 
 const KINDS = ['request', 'incident', 'maintenance', 'project'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
+// Work that needs the committee's permission before it starts, as JAOA's terrace drilling and cabling did.
+const PERMIT_KINDS = ['terrace_work', 'renovation', 'moving', 'other'] as const;
+const PERMIT_WORDS: Record<string, string> = { terrace_work: 'Terrace drilling or cabling', renovation: 'Renovation in a home', moving: 'Moving in or out', other: 'Other work needing permission' };
+
+// The permit now in force: the latest decision, unless it has run past its end date.
+export async function permitState(tx: Tx, w: { id: string; permit_kind: string | null }, day: string) {
+  if (!w.permit_kind) return { needed: false, granted: true, latest: null, history: [] as any[] };
+  const history = await many(tx, `select x.id, x.status, x.note, x.conditions, x.valid_until, x.decided_at, p.full_name as by
+    from app.work_permits x join app.people p on p.tenant_id = x.tenant_id and p.id = x.decided_by
+    where x.work_order_id = $1 order by x.decided_at desc`, [w.id]);
+  const latest = history[0] ?? null;
+  const granted = latest?.status === 'approved' && (!latest.valid_until || latest.valid_until >= day);
+  return { needed: true, granted, latest, history, expired: latest?.status === 'approved' && !granted };
+}
 const OPEN = ['new', 'open', 'in_progress', 'on_hold'];
 const STATUS_WORDS: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In progress', on_hold: 'On hold', done: 'Done',
   closed: 'Closed', cancelled: 'Cancelled' };
@@ -105,6 +119,8 @@ export async function workRoutes(app: FastifyInstance, run: Runner, _svc: Servic
     // A resident sees "Association staff" rather than the names of the people working on it.
     const updates = rows.map(({ person_id, ...u }) => staff ? u : { ...u, by: person_id === actor.personId ? 'You' : 'Association staff' });
     const canPropose = staff && actor.can('approvals.propose', a.node);
+    const permit = await permitState(tx, w, await today(tx));
+    const contract = w.kind === 'project' ? await one(tx, `select ref, signed_on from app.contracts where work_order_id = $1`, [w.id]) : null;
     return {
       id: w.id, ref: w.ref, kind: w.kind, title: w.title, details: w.details, category: w.category, priority: w.priority, status: w.status,
       statusLabel: STATUS_WORDS[w.status], nodeId: w.node_id, place: w.place, unitId: w.unit_id, unit: w.unit,
@@ -113,8 +129,13 @@ export async function workRoutes(app: FastifyInstance, run: Runner, _svc: Servic
       dueOn: w.due_on, createdAt: w.created_at, startedAt: w.started_at, completedAt: w.completed_at, closedAt: w.closed_at,
       estimatePaise: staff ? w.estimate_paise : null,
       approval: staff && w.approval_request_id ? { id: w.approval_request_id, ref: w.approval_ref, status: w.approval_status } : null,
+      permitKind: w.permit_kind, permitLabel: w.permit_kind ? PERMIT_WORDS[w.permit_kind] : null,
+      permit: w.permit_kind ? { granted: permit.granted, expired: !!permit.expired, latest: permit.latest, history: permit.history } : null,
+      contract: staff ? contract : null,
       updates,
-      actions: { moves: moves(a), edit: a.manager, note: true, staffNote: staff,
+      // Contracted projects finish through the handover, not by marking them done.
+      actions: { moves: moves(a).filter(m => !(m.to === 'done' && w.kind === 'project' && contract)), edit: a.manager, note: true, staffNote: staff,
+        decidePermit: !!w.permit_kind && actor.can('permits.decide', a.node) && !['closed', 'cancelled'].includes(w.status),
         requestApproval: canPropose && !(w.approval_request_id && w.approval_status === 'pending') && OPEN.includes(w.status) },
     };
   }));
@@ -125,7 +146,9 @@ export async function workRoutes(app: FastifyInstance, run: Runner, _svc: Servic
       category: z.enum(CATEGORIES).default('general'), priority: z.enum(PRIORITIES).default('normal'),
       nodeId: uuid.optional(), unitId: uuid.nullable().optional(), assetId: uuid.nullable().optional(),
       assigneeId: uuid.nullable().optional(), dueOn: date.nullable().optional(), estimate: rupeesToPaise,
+      permitKind: z.enum(PERMIT_KINDS).nullable().optional(),
     }).parse(req.body);
+    if (b.permitKind && b.kind !== 'request') fail(400, 'Permits are for requests.', 'invalid');
     let nodeId = b.nodeId ?? null;
     let unit: any = null;
     if (b.unitId) {
@@ -148,13 +171,13 @@ export async function workRoutes(app: FastifyInstance, run: Runner, _svc: Servic
     if (managerFields) await personExists(tx, b.assigneeId);
     const ref = (await one(tx, `select app.next_ref('work', 'WO') as ref`))!.ref;
     const w = await one(tx, `insert into app.work_orders (ref, kind, title, details, category, priority, status, node_id, unit_id, asset_id,
-        raised_by, assignee_person_id, due_on, estimate_paise)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) returning id`,
+        raised_by, assignee_person_id, due_on, estimate_paise, permit_kind)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id`,
       [ref, b.kind, b.title, b.details, b.category, status === 'new' && !['normal', 'urgent'].includes(b.priority) ? 'normal' : b.priority,
         status, node.id, unit?.id ?? null, staffHere ? b.assetId ?? null : null, actor.personId,
-        managerFields ? b.assigneeId ?? null : null, managerFields ? b.dueOn ?? null : null, managerFields ? b.estimate : null]);
+        managerFields ? b.assigneeId ?? null : null, managerFields ? b.dueOn ?? null : null, managerFields ? b.estimate : null, b.permitKind ?? null]);
     await tx.query(`insert into app.work_updates (work_order_id, person_id, kind, body, to_status) values ($1, $2, 'created', $3, $4)`,
-      [w!.id, actor.personId, b.kind === 'request' ? 'Request raised' : 'Work order raised', status]);
+      [w!.id, actor.personId, b.kind === 'request' ? (b.permitKind ? `Request raised; needs the committee's permission (${PERMIT_WORDS[b.permitKind].toLowerCase()})` : 'Request raised') : 'Work order raised', status]);
     await audit('work.created', 'work_order', w!.id, `${ref} raised: ${b.title}`, { kind: b.kind, nodeId: node.id });
     return { id: w!.id, ref };
   }));
@@ -189,12 +212,44 @@ export async function workRoutes(app: FastifyInstance, run: Runner, _svc: Servic
     return { ok: true };
   }));
 
+  app.post('/api/work/:id/permit', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    const a = await loadWork(tx, actor, idParam.parse(req.params).id);
+    const { w } = a;
+    if (!w.permit_kind) fail(400, 'This request does not need a permit.', 'invalid');
+    if (!actor.can('permits.decide', a.node)) forbidden();
+    if (['closed', 'cancelled'].includes(w.status)) fail(409, 'This request is closed.', 'closed');
+    const b = z.object({ decision: z.enum(['approved', 'declined', 'revoked']), note: z.string().trim().min(3, 'Give the reason or approval reference').max(2000),
+      conditions: z.string().trim().max(2000).default(''), validUntil: date.nullable().optional() }).parse(req.body);
+    const day = await today(tx);
+    const cur = (await permitState(tx, w, day)).latest?.status ?? null;
+    const allowed = cur === 'approved' ? ['revoked'] : ['approved', 'declined'];
+    if (!allowed.includes(b.decision)) fail(409, cur === 'approved' ? 'A permit in force can only be revoked.' : 'Approve or decline the permit.', 'invalid');
+    if (b.validUntil && b.validUntil < day) fail(400, 'The permit cannot end before today.', 'invalid');
+    await tx.query(`insert into app.work_permits (work_order_id, status, note, conditions, valid_until, decided_by) values ($1, $2, $3, $4, $5, $6)`,
+      [w.id, b.decision, b.note, b.conditions, b.decision === 'approved' ? b.validUntil ?? null : null, actor.personId]);
+    const words = { approved: 'Permit granted', declined: 'Permit declined', revoked: 'Permit revoked' }[b.decision];
+    await tx.query(`insert into app.work_updates (work_order_id, person_id, kind, body) values ($1, $2, 'note', $3)`,
+      [w.id, actor.personId, `${words}: ${b.note}${b.conditions ? `. Conditions: ${b.conditions}` : ''}${b.validUntil && b.decision === 'approved' ? `. Valid until ${b.validUntil}` : ''}`]);
+    // Without a permit in force, work in progress stops.
+    if (b.decision !== 'approved' && w.status === 'in_progress') {
+      await tx.query(`update app.work_orders set status = 'on_hold' where id = $1`, [w.id]);
+      await tx.query(`insert into app.work_updates (work_order_id, person_id, kind, body, from_status, to_status) values ($1, $2, 'status', $3, 'in_progress', 'on_hold')`,
+        [w.id, actor.personId, `${words}; work stopped`]);
+    }
+    await audit(`permit.${b.decision}`, 'work_order', w.id, `${w.ref}: ${words.toLowerCase()}`, { note: b.note });
+    return { ok: true };
+  }));
+
   app.post('/api/work/:id/status', async req => run.auth(req, async ({ tx, actor, audit }) => {
     const a = await loadWork(tx, actor, idParam.parse(req.params).id);
     const b = z.object({ to: z.enum(['open', 'in_progress', 'on_hold', 'done', 'closed', 'cancelled']), note: z.string().trim().max(4000).default('') }).parse(req.body);
     const move = moves(a).find(m => m.to === b.to) ?? fail(403, `This work order cannot be moved to "${STATUS_WORDS[b.to]}" by you now.`, 'forbidden');
     if (move!.needsNote && !b.note) fail(400, b.to === 'done' ? 'Say what was done.' : 'Give the reason.', 'invalid');
     const { w } = a;
+    if (b.to === 'in_progress' && w.permit_kind && !(await permitState(tx, w, await today(tx))).granted)
+      fail(409, 'This work needs the committee\'s permit before it starts.', 'permit_needed');
+    if (b.to === 'done' && w.kind === 'project' && await one(tx, `select 1 from app.contracts where work_order_id = $1`, [w.id]))
+      fail(409, 'Submit the handover: contracted work is done when the handover is accepted.', 'handover_needed');
     await tx.query(`update app.work_orders set status = $2,
         started_at = case when $2 = 'in_progress' then coalesce(started_at, now()) else started_at end,
         completed_at = case when $2 = 'done' then now() when $2 in ('open', 'in_progress') then null else completed_at end,

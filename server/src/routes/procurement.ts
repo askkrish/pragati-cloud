@@ -43,13 +43,13 @@ export function compare(quotes: any[], day: string) {
   return { rows, summary, checks: rows.filter(r => r.missing.length).map(r => `${r.vendor}: confirm ${r.missing.join(', ')}.`) };
 }
 
-async function quotesFor(tx: Tx, workId: string) {
+export async function quotesFor(tx: Tx, workId: string) {
   return many(tx, `select q.*, v.name as vendor, v.status as vendor_status, p.full_name as entered_by_name
     from app.quotes q join app.vendors v on v.tenant_id = q.tenant_id and v.id = q.vendor_id
     join app.people p on p.tenant_id = q.tenant_id and p.id = q.entered_by
     where q.work_order_id = $1 order by q.created_at`, [workId]);
 }
-async function selectionsFor(tx: Tx, workId: string) {
+export async function selectionsFor(tx: Tx, workId: string) {
   return many(tx, `select s.id, s.reason, s.single_quote_reason, s.created_at, s.quote_id, q.ref as quote_ref, v.id as vendor_id, v.name as vendor,
       q.amount_paise, q.tax, q.gst_paise, r.id as approval_id, r.ref as approval_ref, r.status, p.full_name as chosen_by
     from app.vendor_selections s join app.quotes q on q.tenant_id = s.tenant_id and q.id = s.quote_id

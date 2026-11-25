@@ -6,7 +6,7 @@ import { saveUpload } from '../services/files.ts';
 import { idParam, z } from './z.ts';
 import { audienceOf, seesDocument, seesNotice } from './notices.ts';
 
-const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation', 'invoice', 'payment_proof', 'document', 'notice'] as const;
+const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation', 'invoice', 'payment_proof', 'document', 'notice', 'evidence'] as const;
 const OPS = ['operations.view', 'operations.update', 'operations.manage'];
 
 export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Services) {
@@ -17,6 +17,9 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
       const home = await one(c.tx, `select 1 from app.ownerships where person_id = $1 and ends_on is null
         union select 1 from app.occupancies where person_id = $1 and ends_on is null`, [c.actor.personId]);
       if (!home && !OPS.some(p => c.actor.canAnywhere(p))) forbidden();
+    } else if (purpose === 'evidence') {
+      // Handover documents, service reports and test certificates: operations staff.
+      if (!['operations.update', 'operations.manage'].some(p => c.actor.canAnywhere(p)) && !c.actor.canAnywhere('procurement.manage')) forbidden();
     } else if (purpose === 'contract') {
       if (!c.actor.canAnywhere('operations.manage')) forbidden();
     } else if (purpose === 'quotation') {
@@ -42,6 +45,7 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
         || (f.purpose === 'ownership_document' && actor.canAnywhere('people.view'))
         || (f.purpose === 'other' && actor.canAnywhere('audit.view'))
         || (f.purpose === 'contract' && staff)
+        || (f.purpose === 'evidence' && (staff || !!await one(tx, `select 1 from app.handovers where (file_id = $1 or response_file_id = $1) and recipient_id = $2`, [f.id, actor.personId])))
         || (f.purpose === 'quotation' && (actor.canAnywhere('procurement.view') || actor.canAnywhere('procurement.manage')))
         || (['invoice', 'payment_proof'].includes(f.purpose) && (actor.can('finance.view') || actor.can('finance.manage')))
         || (f.purpose === 'invoice' && actor.canAnywhere('finance.prepare'))
@@ -86,7 +90,7 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
     'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'assets', 'asset_contracts',
     'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'vendors', 'quotes', 'vendor_selections', 'vendor_reviews',
     'finance_settings', 'ledger_accounts', 'journals', 'journal_lines', 'charge_plans', 'billing_runs', 'billing_run_lines', 'payment_claims',
-    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'notices', 'notice_reads', 'documents', 'ask_questions', 'files', 'audit_events'];
+    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'notices', 'notice_reads', 'documents', 'ask_questions', 'rfqs', 'contracts', 'contract_changes', 'milestones', 'handovers', 'asset_services', 'work_permits', 'files', 'audit_events'];
 
   app.get('/api/export', async (req, reply) => {
     const data = await run.auth(req, async ({ tx, actor, audit, tenant }) => {

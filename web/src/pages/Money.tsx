@@ -544,7 +544,7 @@ function VoucherForm({ onDone }: { onDone: (id: string) => void }) {
 export function VoucherView({ id }: { id: string }) {
   const { data: v, loading, error, reload } = useApi(`/api/finance/vouchers/${id}`);
   const acc = useAccounts();
-  const [sheet, setSheet] = useState<null | 'pay' | 'cancel'>(null);
+  const [sheet, setSheet] = useState<null | 'pay' | 'cancel' | 'gst'>(null);
   const [f, setF] = useState({ accountId: '', date: todayIST(), mode: 'neft', reference: '', note: '' });
   const act = useAction();
   if (loading && !v) return <Loading />;
@@ -565,6 +565,14 @@ export function VoucherView({ id }: { id: string }) {
       {v.journal_ref && <div><dt>Paid</dt><dd>{shortDate(v.paid_on)}, {v.journal_ref}{v.paid_reference ? `, ref ${v.paid_reference}` : ''}</dd></div>}
     </dl>
     {v.cancelled_note && <p className="note">Cancelled: {v.cancelled_note}</p>}
+    <section className="panel pad gst">
+      <div className="head-row"><h2>GST</h2><span className={`tag gst-${v.gst_status ?? 'none'}`}>{GST_STATUS[v.gst_status ?? 'none']}</span></div>
+      {v.gst_status === 'verified' ? <p>GSTIN {v.gstin} and invoice {v.invoice_no} checked by {v.gst_checked_by_name}{v.gst_checked_at ? ` on ${shortDate(v.gst_checked_at)}` : ''}.{v.gst_note ? ` ${v.gst_note}` : ''}</p>
+        : v.gst_status === 'pending' ? <p>GSTIN {v.gstin} to be checked by the treasurer. The voucher cannot be paid until it is.{v.gst_note ? ` ${v.gst_note}` : ''}</p>
+        : v.gst_status === 'not_charged' ? <p className="quiet">The vendor does not charge GST on this invoice.{v.gst_note ? ` ${v.gst_note}` : ''}</p>
+        : <p className="quiet">When a vendor charges GST, record their GSTIN and the invoice; the treasurer checks them on the GST portal before paying.</p>}
+      {(v.actions.gst || v.actions.verifyGst) && <div className="actions"><button onClick={() => setSheet('gst')}>{v.actions.verifyGst ? 'Record or verify GST' : 'Record GST details'}</button></div>}
+    </section>
     <div className="actions">
       {v.actions.pay && <button className="primary" onClick={() => setSheet('pay')}>Pay {rs(net)}</button>}
       {v.actions.cancel && <button onClick={() => setSheet('cancel')}>Cancel voucher</button>}
@@ -582,6 +590,7 @@ export function VoucherView({ id }: { id: string }) {
         await api.post(`/api/finance/vouchers/${id}/pay`, { accountId: f.accountId, date: f.date, mode: f.mode, reference: f.reference || null }); setSheet(null); reload(); })}>
         Record payment of {rs(net)}</button>
     </Sheet>}
+    {sheet === 'gst' && <Sheet open onClose={() => setSheet(null)} title="GST"><GstForm v={v} onDone={() => { setSheet(null); reload(); }} /></Sheet>}
     {sheet === 'cancel' && <Sheet open onClose={() => setSheet(null)} title="Cancel voucher">
       <label className="field">Reason<textarea value={f.note} onChange={e => setF({ ...f, note: e.target.value })} /></label>
       <ErrorNote error={act.error} />
@@ -589,6 +598,26 @@ export function VoucherView({ id }: { id: string }) {
         await api.post(`/api/finance/vouchers/${id}/cancel`, { note: f.note }); setSheet(null); reload(); })}>Cancel voucher</button>
     </Sheet>}
   </>;
+}
+
+const GST_STATUS: Record<string, string> = { none: 'Not recorded', not_charged: 'Not charged', pending: 'To verify', verified: 'Verified' };
+
+function GstForm({ v, onDone }: { v: any; onDone: () => void }) {
+  const [f, setF] = useState({ status: v.gst_status ?? (v.actions.verifyGst ? 'verified' : 'pending'), gstin: v.gstin ?? v.vendor_gstin ?? '', invoiceNo: v.invoice_no ?? '', note: v.gst_note ?? '' });
+  const { busy, error, run } = useAction();
+  return <form className="form" onSubmit={e => { e.preventDefault(); run(async () => {
+    await api.post(`/api/finance/vouchers/${v.id}/gst`, { ...f, gstin: f.status === 'not_charged' ? undefined : f.gstin, invoiceNo: f.invoiceNo || null }); onDone(); }); }}>
+    <label className="field">GST on this invoice<select value={f.status} onChange={e => setF({ ...f, status: e.target.value })}>
+      <option value="pending">Charged: to be verified</option>{v.actions.verifyGst && <option value="verified">Charged: verified on the GST portal</option>}
+      <option value="not_charged">Not charged</option></select></label>
+    {f.status !== 'not_charged' && <div className="two">
+      <label className="field">Vendor's GSTIN<input required value={f.gstin} maxLength={15} onChange={e => setF({ ...f, gstin: e.target.value.toUpperCase() })} placeholder="33AABCU9603R1ZX" /></label>
+      <label className="field">Invoice number<input required={f.status === 'verified'} value={f.invoiceNo} onChange={e => setF({ ...f, invoiceNo: e.target.value })} /></label>
+    </div>}
+    <label className="field">Note (optional)<input value={f.note} onChange={e => setF({ ...f, note: e.target.value })} placeholder={f.status === 'verified' ? 'For example, active on the portal on 25 Nov' : ''} /></label>
+    <ErrorNote error={error} />
+    <div className="actions"><button className="primary" disabled={busy}>Save</button></div>
+  </form>;
 }
 
 // ================================================================ bank and cash

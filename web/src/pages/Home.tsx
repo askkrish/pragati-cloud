@@ -6,6 +6,7 @@ import { OperationsPanel } from './Work.tsx';
 import { MoneyPanel } from './Money.tsx';
 import { NoticesPanel } from './Notices.tsx';
 import { AskPanel } from './Ask.tsx';
+import { HandoversPanel } from './Delivery.tsx';
 
 export type TreeNode = { id: string; parent_id: string | null; kind: string; name: string; code: string | null; depth: number;
   sort_order: number; in_scope: boolean; units_here: number; units_total: number };
@@ -66,6 +67,8 @@ export function Home() {
     <AskPanel />
 
     <NoticesPanel />
+
+    <HandoversPanel />
 
     {(waiting.data?.length ?? 0) > 0 && <section>
       <header><h2>{t('Waiting for your vote')}</h2><Link to="/approvals">All approvals</Link></header>

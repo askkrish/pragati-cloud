@@ -415,3 +415,22 @@ button.link { background: none; border: 0; padding: 0; color: var(--brand-ink); 
 .ask-home { display: grid; gap: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .ask-home label { font: 700 1.05rem/1.2 var(--display); color: var(--brand-ink); }
 .ask-home > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+
+/* ---------- project delivery and permits ---------- */
+.delivery { gap: 18px; }
+.delivery h3 { font: 700 1.08rem/1.3 var(--display); }
+.delivery .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 10px 0; }
+.delivery .tile .big { font-size: var(--step-2); }
+.tag.a-approved, .tag.ho-accepted, .tag.p-approved { background: var(--yes-wash); color: var(--yes); }
+.tag.a-pending, .tag.ho-submitted { background: var(--brand-wash); color: var(--brand-ink); }
+.tag.a-rejected, .tag.ho-returned, .tag.p-declined, .tag.p-revoked { background: #fbe9e7; color: var(--stop); }
+.tag.a-withdrawn, .tag.ho-superseded { background: var(--line-2); color: var(--ink-2); }
+.row.handover .meta { white-space: pre-wrap; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; }
+.permit { border-left: 4px solid var(--brand); }
+.tag.escalated { background: #fbe9e7; color: var(--stop); }
+.tag.sv-passed, .tag.gst-verified, .tag.gst-not_charged { background: var(--yes-wash); color: var(--yes); }
+.tag.sv-follow_up, .tag.gst-pending { background: var(--no-wash); color: var(--no); }
+.tag.sv-out_of_service { background: #fbe9e7; color: var(--stop); }
+.tag.gst-none { background: var(--line-2); color: var(--ink-2); }
+.gst { max-width: 760px; }

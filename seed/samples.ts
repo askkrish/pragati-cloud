@@ -16,8 +16,9 @@ import { writeAudit } from '../server/src/services/audit.ts';
 import { importUnits } from '../server/src/services/import-units.ts';
 import { seedOperations } from './operations.ts';
 import { seedProcurement } from './procurement.ts';
-import { seedFinance } from './finance.ts';
+import { fixDemoTreasurer, seedFinance } from './finance.ts';
 import { seedNotices } from './notices.ts';
+import { seedDelivery } from './delivery.ts';
 import { createStorage } from '../server/src/services/storage.ts';
 
 const appUrl = process.env.DATABASE_URL_APP ?? 'postgres://pragati_web:pragati-dev-only@localhost:5433/pragati_dev';
@@ -338,7 +339,9 @@ for (const [slug, n] of [['maple-court', 101], ['riverside-greens', 202], ['palm
   if (t) await withTenant(pool, t.id, async tx => { await seedOperations(tx, slug, n); await seedProcurement(tx, slug); });
   // The books are loaded in their own transaction, with more time: a township's year is many thousand entries.
   if (t) await withTenant(pool, t.id, async tx => { await tx.query(`set local statement_timeout = '600s'`); await seedFinance(tx, slug, n + 7); });
+  if (t) await withTenant(pool, t.id, tx => fixDemoTreasurer(tx, slug));
   if (t) await withTenant(pool, t.id, tx => seedNotices(tx, slug, storage));
+  if (t) await withTenant(pool, t.id, tx => seedDelivery(tx, slug, storage));
 }
 
 // On the pilot, the app's own Azure address shows Palm Meadows until communities have their own domains.

@@ -41,7 +41,7 @@ export function SettingsPage() {
   const { busy, error, run } = useAction();
   const [saved, setSaved] = useState(false);
   useEffect(() => { if (data) setF({ brandName: data.brand_name, legalName: data.legal_name, registrationNo: data.registration_no ?? '',
-    city: data.city ?? '', primaryColor: data.primary_color, languages: data.languages, assistantName: data.assistant_name }); }, [data]);
+    city: data.city ?? '', primaryColor: data.primary_color, languages: data.languages, assistantName: data.assistant_name, escalationDays: data.escalation_days }); }, [data]);
   if (loading || !f) return <Loading />;
   const preview = (c: string) => document.documentElement.style.setProperty('--brand', c);
   const save = (e: React.FormEvent) => { e.preventDefault(); setSaved(false); run(async () => {
@@ -75,6 +75,8 @@ export function SettingsPage() {
         <label className="field">Registration number<input value={f.registrationNo} onChange={e => setF({ ...f, registrationNo: e.target.value })} /></label>
         <label className="field">City<input value={f.city} onChange={e => setF({ ...f, city: e.target.value })} /></label>
         <label className="field">Assistant's name<input value={f.assistantName} onChange={e => setF({ ...f, assistantName: e.target.value })} /></label>
+        <label className="field">Flag decisions waiting more than (days)<input type="number" min={1} max={90} value={f.escalationDays}
+          onChange={e => setF({ ...f, escalationDays: e.target.value })} /></label>
       </div>
       <label className="field">Logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
         const file = e.target.files?.[0]; if (file) run(async () => { await api.upload('/api/settings/logo', file); refreshCommunity(); }); }} />

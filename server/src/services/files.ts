@@ -24,6 +24,7 @@ const ALLOWED: Record<string, string[]> = {
   payment_proof: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'],
   document: ['application/pdf', 'image/png', 'image/jpeg'],
   notice: ['application/pdf', 'image/png', 'image/jpeg'],
+  evidence: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'],
 };
 
 export async function saveUpload(c: Ctx, storage: Storage, part: MultipartFile, purpose: string) {

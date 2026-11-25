@@ -6,6 +6,7 @@ import { ErrorNote, Link, Loading, navigate, PageHead, Sheet, useAction, useApi,
 import type { TreeNode } from './Home.tsx';
 import { CATEGORY } from './labels.ts';
 import { Quotations, seesProcurement } from './Procurement.tsx';
+import { Delivery, Permit, PERMIT_KINDS } from './Delivery.tsx';
 export { CATEGORY };
 
 export const isStaff = (me: Me) => ['operations.view', 'operations.update', 'operations.manage'].some(p => can(me, p));
@@ -227,7 +228,9 @@ export function WorkOrderView({ id }: { id: string }) {
         const r = await api.post(`/api/work/${id}/approval`, {}); refreshMe(); navigate(`/approvals/${r.id}`); })}>Send for approval</button>}
     </div>}
     <ErrorNote error={act.error} />
+    {w.permit && <Permit w={w} onChange={reload} />}
     {staffView && seesProcurement(me) && <Quotations workId={id} onChange={reload} />}
+    {(w.kind === 'project' || w.contract) && <Delivery workId={id} onChange={reload} />}
     <section>
       <header><h2>Updates</h2></header>
       <ol className="trail">{w.updates.map((u: any) => <li key={u.id} className={`k-${u.kind}${u.staff_only ? ' staff' : ''}`}>
@@ -355,7 +358,7 @@ export function WorkOrderNew() {
 export function Requests() {
   const { me } = useApp();
   const { data, loading, reload } = useApi<any[]>('/api/work?view=raised');
-  const [f, setF] = useState({ unitId: me.homes[0]?.id ?? '', title: '', details: '', category: 'general', urgent: false });
+  const [f, setF] = useState({ unitId: me.homes[0]?.id ?? '', title: '', details: '', category: 'general', urgent: false, permitKind: '' });
   const [file, setFile] = useState<File | null>(null);
   const [key, setKey] = useState(0);
   const { busy, error, run } = useAction();
@@ -363,12 +366,13 @@ export function Requests() {
   return <>
     <PageHead title="My requests" />
     {homes.length > 0 ? <form className="form panel pad" style={{ maxWidth: 680 }} onSubmit={e => { e.preventDefault(); run(async () => {
-      const r = await api.post('/api/work', { kind: 'request', unitId: f.unitId, title: f.title, details: f.details, category: f.category, priority: f.urgent ? 'urgent' : 'normal' });
+      const r = await api.post('/api/work', { kind: 'request', unitId: f.unitId, title: f.title, details: f.details, category: f.category, priority: f.urgent ? 'urgent' : 'normal',
+        permitKind: f.permitKind || null });
       if (file) {
         const up = await api.upload('/api/files?purpose=work_photo', file);
         await api.post(`/api/work/${r.id}/updates`, { body: 'Photo', fileId: up.id });
       }
-      setF({ ...f, title: '', details: '', urgent: false }); setFile(null); setKey(k => k + 1); reload();
+      setF({ ...f, title: '', details: '', urgent: false, permitKind: '' }); setFile(null); setKey(k => k + 1); reload();
     }); }}>
       <h2>Raise a request</h2>
       <div className="two">
@@ -382,6 +386,8 @@ export function Requests() {
       <label className="field">More details (optional)<textarea value={f.details} onChange={e => setF({ ...f, details: e.target.value })}
         placeholder="When it started, the best time to visit" /></label>
       <label className="field">Photo (optional)<input key={key} type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
+      <label className="field">Does this need the committee's permission?<select value={f.permitKind} onChange={e => setF({ ...f, permitKind: e.target.value })}>
+        <option value="">No: it is a problem to fix</option>{Object.entries(PERMIT_KINDS).map(([k, v]) => <option key={k} value={k}>Yes: {v.toLowerCase()}</option>)}</select></label>
       <label className="check"><input type="checkbox" checked={f.urgent} onChange={e => setF({ ...f, urgent: e.target.checked })} />This is urgent (a safety risk, no water or no power)</label>
       <ErrorNote error={error} />
       <div className="actions"><button className="primary" disabled={busy}>Send request</button></div>
@@ -658,6 +664,7 @@ function ContractForm({ renewing, assetId, onDone }: { renewing?: any; assetId?:
 export function AssetView({ id }: { id: string }) {
   const { data: a, loading, error, reload } = useApi(`/api/assets/${id}`);
   const [sheet, setSheet] = useState(false);
+  const [log, setLog] = useState(false);
   if (loading && !a) return <Loading />;
   if (error) return <ErrorNote error={error} />;
   return <>
@@ -675,6 +682,15 @@ export function AssetView({ id }: { id: string }) {
       <Link to={`/work/orders/new?asset=${a.id}`} className="button">Raise a work order</Link>
       {a.canManage && <button onClick={() => setSheet(true)}>Add a renewal</button>}
     </div>
+    <section><header><h2>Service and inspection log</h2>{a.canLog && <button onClick={() => setLog(true)}>Record a service or inspection</button>}</header>
+      {a.nextServiceOn && <p className={a.serviceOverdue ? 'note' : 'quiet'}>Next service {a.serviceOverdue ? 'was due' : 'due'} on {shortDate(a.nextServiceOn)}.</p>}
+      <div className="rows">{a.services.length ? a.services.map((x: any) => <div key={x.id} className="row">
+        <span><span className="title">{shortDate(x.serviced_on)}: {SERVICE_KIND[x.kind]} by {x.provider}</span><br />
+          <span className="meta">{x.notes || 'No remarks'}{x.next_due_on ? `. Next due ${shortDate(x.next_due_on)}` : ''}. Recorded by {x.recorded_by_name}</span>
+          {(x.file_id || x.work_ref) && <><br /><span className="meta">{x.file_id && <a href={`/api/files/${x.file_id}`}>{x.file_name}</a>}{x.file_id && x.work_ref ? '; ' : ''}
+            {x.work_ref && <Link to={`/work/orders/${x.work_order_id}`}>{x.work_ref}</Link>}</span></>}</span>
+        <span className="side"><span className={`tag sv-${x.outcome}`}>{OUTCOME[x.outcome]}</span></span></div>)
+        : <p className="empty">No services or inspections recorded yet.</p>}</div></section>
     <section><header><h2>AMC, warranty and licences</h2></header><RenewalRows rows={a.contracts} onChange={reload} history /></section>
     {a.routines.length > 0 && <section><header><h2>Routines</h2></header>
       <div className="rows">{a.routines.map((r: any) => <Link key={r.id} to={`/work/routines/${r.id}`} className="row"><span className="title">{r.title}</span><span className="side quiet">{r.ref}</span></Link>)}</div></section>}
@@ -683,7 +699,36 @@ export function AssetView({ id }: { id: string }) {
         <span><span className="title">{w.title}</span><br /><span className="meta">{w.ref}, {KIND[w.kind]}, {shortDate(w.created_at)}</span></span>
         <span className="side"><span className={`tag w-${w.status}`}>{WORK_STATUS[w.status]}</span></span></Link>) : <p className="empty">No work recorded on this asset yet.</p>}</div></section>
     {sheet && <Sheet open onClose={() => setSheet(false)} title="Add a renewal"><ContractForm assetId={a.id} onDone={() => { setSheet(false); reload(); }} /></Sheet>}
+    {log && <Sheet open onClose={() => setLog(false)} title="Service or inspection"><ServiceForm assetId={a.id} onDone={(w: string | null) => { setLog(false); reload(); if (w) navigate(`/work/orders/${w}`); }} /></Sheet>}
   </>;
+}
+
+const SERVICE_KIND: Record<string, string> = { service: 'Service', inspection: 'Inspection', repair: 'Repair', statutory: 'Statutory inspection' };
+const OUTCOME: Record<string, string> = { passed: 'Passed', follow_up: 'Follow-up needed', out_of_service: 'Out of service' };
+
+function ServiceForm({ assetId, onDone }: { assetId: string; onDone: (workId: string | null) => void }) {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const [f, setF] = useState({ servicedOn: today, kind: 'service', provider: '', outcome: 'passed', notes: '', nextDueOn: '', raiseWorkOrder: true });
+  const [file, setFile] = useState<File | null>(null);
+  const { busy, error, run } = useAction();
+  const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+  return <form className="form" onSubmit={e => { e.preventDefault(); run(async () => {
+    const fileId = file ? (await api.upload('/api/files?purpose=evidence', file)).id : null;
+    const r = await api.post(`/api/assets/${assetId}/services`, { ...f, nextDueOn: f.nextDueOn || null, fileId, raiseWorkOrder: f.outcome !== 'passed' && f.raiseWorkOrder });
+    onDone(r.workId); }); }}>
+    <div className="two">
+      <label className="field">Date<input type="date" required max={today} value={f.servicedOn} onChange={set('servicedOn')} /></label>
+      <label className="field">Kind<select value={f.kind} onChange={set('kind')}>{Object.entries(SERVICE_KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+      <label className="field">Done by<input required value={f.provider} onChange={set('provider')} placeholder="Vendor or technician" /></label>
+      <label className="field">Outcome<select value={f.outcome} onChange={set('outcome')}>{Object.entries(OUTCOME).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+      <label className="field">Next due (optional)<input type="date" min={f.servicedOn} value={f.nextDueOn} onChange={set('nextDueOn')} /></label>
+      <label className="field">Service report (optional)<input type="file" accept=".pdf,image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
+    </div>
+    <label className="field">Remarks{f.outcome !== 'passed' ? ': what needs attention' : ' (optional)'}<textarea required={f.outcome !== 'passed'} value={f.notes} onChange={set('notes')} /></label>
+    {f.outcome !== 'passed' && <label className="check"><input type="checkbox" checked={f.raiseWorkOrder} onChange={set('raiseWorkOrder')} />Raise a work order for it</label>}
+    <ErrorNote error={error} />
+    <div className="actions"><button className="primary" disabled={busy}>Save</button></div>
+  </form>;
 }
 
 export function AssetNew() {

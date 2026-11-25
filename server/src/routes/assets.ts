@@ -53,7 +53,62 @@ export async function assetRoutes(app: FastifyInstance, run: Runner, _svc: Servi
     const routines = await many(tx, `select id, ref, title from app.routines where asset_id = $1 and archived_at is null order by title`, [a.id]);
     const work = await many(tx, `select id, ref, kind, title, status, created_at, completed_at from app.work_orders where asset_id = $1
       order by created_at desc limit 30`, [a.id]);
-    return { ...a, contracts, routines, work, canManage: manages(actor, { id: a.node_id, ancestor_ids: a.ancestor_ids }) };
+    const services = await many(tx, `select s.*, p.full_name as recorded_by_name, f.file_name, w.ref as work_ref
+      from app.asset_services s join app.people p on p.tenant_id = s.tenant_id and p.id = s.recorded_by
+      left join app.files f on f.tenant_id = s.tenant_id and f.id = s.file_id
+      left join app.work_orders w on w.tenant_id = s.tenant_id and w.id = s.work_order_id
+      where s.asset_id = $1 order by s.serviced_on desc, s.created_at desc limit 50`, [a.id]);
+    const node = { id: a.node_id, ancestor_ids: a.ancestor_ids };
+    const next = services.find(x => x.next_due_on)?.next_due_on ?? null;
+    return { ...a, contracts, routines, work, services, nextServiceOn: next, serviceOverdue: !!next && next < day,
+      canManage: manages(actor, node), canLog: manages(actor, node) || actor.can('operations.update', node) };
+  }));
+
+  // The service and inspection log, carried over from JAOA's register: who serviced it, when, the
+  // outcome, and when it is next due. A failed check can raise a work order in the same step.
+  app.post('/api/assets/:id/services', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    const a = await loadAsset(tx, actor, idParam.parse(req.params).id);
+    const node = { id: a.node_id, ancestor_ids: a.ancestor_ids };
+    if (!manages(actor, node) && !actor.can('operations.update', node)) forbidden();
+    const b = z.object({ servicedOn: date, kind: z.enum(['service', 'inspection', 'repair', 'statutory']).default('service'), provider: text(150),
+      outcome: z.enum(['passed', 'follow_up', 'out_of_service']), notes: z.string().trim().max(3000).default(''), nextDueOn: date.nullable().optional(),
+      fileId: uuid.nullable().optional(), raiseWorkOrder: z.boolean().default(false) }).parse(req.body);
+    const day = await today(tx);
+    if (b.servicedOn > day) fail(400, 'Choose a date on or before today.', 'invalid');
+    if (b.nextDueOn && b.nextDueOn <= b.servicedOn) fail(400, 'The next service must come after this one.', 'invalid');
+    if (b.outcome !== 'passed' && !b.notes) fail(400, 'Describe what needs attention.', 'invalid');
+    if (b.fileId && !await one(tx, `select 1 from app.files where id = $1 and purpose = 'evidence'`, [b.fileId])) fail(400, 'Upload the report again.', 'invalid');
+    let workId: string | null = null, workRef: string | null = null;
+    if (b.raiseWorkOrder && b.outcome !== 'passed') {
+      workRef = (await one(tx, `select app.next_ref('work', 'WO') as ref`))!.ref;
+      workId = (await one(tx, `insert into app.work_orders (ref, kind, title, details, category, priority, node_id, asset_id, raised_by, status)
+        values ($1, 'maintenance', $2, $3, $4, $5, $6, $7, $8, 'open') returning id`,
+        [workRef, `${a.name}: ${b.outcome === 'out_of_service' ? 'out of service' : 'follow-up after ' + b.kind}`.slice(0, 200), b.notes,
+          ({ lift: 'lifts', pump: 'water', water_treatment: 'water', sewage_treatment: 'water', fire_safety: 'fire_safety', pool: 'pool', garden: 'garden',
+             generator: 'electrical', transformer: 'electrical', electrical: 'electrical', solar: 'electrical', cctv: 'security', access_control: 'security' } as Record<string, string>)[a.kind] ?? 'general',
+          b.outcome === 'out_of_service' ? 'urgent' : 'high', a.node_id, a.id, actor.personId]))!.id;
+      await tx.query(`insert into app.work_updates (work_order_id, person_id, kind, body) values ($1, $2, 'note', $3)`,
+        [workId, actor.personId, `Raised from the ${b.kind} by ${b.provider} on ${b.servicedOn}`]);
+    }
+    const ref = (await one(tx, `select app.next_ref('service', 'SV') as ref`))!.ref;
+    await tx.query(`insert into app.asset_services (ref, asset_id, serviced_on, kind, provider, outcome, notes, next_due_on, file_id, work_order_id, recorded_by)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [ref, a.id, b.servicedOn, b.kind, b.provider, b.outcome, b.notes, b.nextDueOn ?? null, b.fileId ?? null, workId, actor.personId]);
+    await audit('asset.serviced', 'asset', a.id, `${a.ref}: ${b.kind} by ${b.provider}, ${b.outcome.replace(/_/g, ' ')}`, { ref, workRef });
+    return { ref, workId, workRef };
+  }));
+
+  // Assets whose next service or inspection is due within the days given, or overdue.
+  app.get('/api/assets-due', async req => run.auth(req, async ({ tx, actor }) => {
+    const q = z.object({ within: z.coerce.number().int().min(0).max(365).default(30) }).parse(req.query);
+    const scopes = seeScopes(actor);
+    if (scopes && !scopes.length) return [];
+    const day = await today(tx);
+    return many(tx, `select a.id, a.ref, a.name, ${PLACE()} as place, s.next_due_on, (s.next_due_on - $2::date) as days_left
+      from app.assets a join app.property_nodes n on n.tenant_id = a.tenant_id and n.id = a.node_id
+      join lateral (select next_due_on from app.asset_services x where x.asset_id = a.id order by x.serviced_on desc, x.created_at desc limit 1) s on true
+      where a.archived_at is null and s.next_due_on is not null and s.next_due_on <= $2::date + $3::int and ${IN_SCOPE(1)}
+      order by s.next_due_on`, [scopes, day, q.within]);
   }));
 
   const assetBody = z.object({ name: text(120), kind: z.enum(ASSET_KINDS), nodeId: uuid, facilityId: uuid.nullable().optional(),

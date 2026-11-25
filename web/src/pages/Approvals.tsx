@@ -28,7 +28,8 @@ export function ApprovalList() {
           <span className="meta">{a.ref}, {a.scope}. {a.status === 'pending'
             ? `${a.stages > 1 ? `Stage ${a.current_stage} of ${a.stages}: ` : ''}with ${a.committee}`
             : `Raised by ${a.proposer}`}</span></span>
-        <span className="side"><span className="num">{rupees(a.amount_paise)}</span><br /><StatusTag status={a.status} /></span>
+        <span className="side"><span className="num">{rupees(a.amount_paise)}</span><br /><StatusTag status={a.status} />
+          {a.escalated && <><br /><span className="tag escalated">Waiting {a.waiting_days} days</span></>}</span>
       </Link>) : <p className="empty">{tab === 'mine' ? 'Nothing is waiting for your vote.' : 'No requests here.'}</p>}
     </div>}
   </>;

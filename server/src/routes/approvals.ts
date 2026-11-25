@@ -88,7 +88,10 @@ export async function approvalRoutes(app: FastifyInstance, run: Runner, _svc: Se
       select r.id, r.ref, r.subject_type, r.title, r.amount_paise, r.status, r.current_stage, r.created_at, r.decided_at,
              n.name as scope, p.full_name as proposer, s.label as stage_label, c.name as committee,
              (select count(*)::int from app.approval_stages x where x.request_id = r.id) as stages,
-             mv.vote as my_vote, mv.person_id is not null as i_vote
+             mv.vote as my_vote, mv.person_id is not null as i_vote,
+             (now()::date - r.created_at::date) as waiting_days,
+             -- Decisions waiting longer than the community allows are flagged, as JAOA escalated them.
+             (r.status = 'pending' and now() - r.created_at > make_interval(days => (select escalation_days from app.tenants))) as escalated
         from app.approval_requests r
         join app.property_nodes n on n.tenant_id = r.tenant_id and n.id = r.scope_node_id
         join app.people p on p.tenant_id = r.tenant_id and p.id = r.proposer_person_id
