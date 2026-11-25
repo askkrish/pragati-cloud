@@ -105,3 +105,12 @@ jobs:
             sleep 15
           done
           exit 1
+
+      # Signs in to the demo community and checks that every area answers.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check each area on the live demo
+        run: npx tsx scripts/smoke.ts "$(terraform -chdir=$TF_DIR output -raw app_url)"
