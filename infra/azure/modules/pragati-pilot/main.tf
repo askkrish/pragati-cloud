@@ -202,7 +202,7 @@ resource "azurerm_role_assignment" "app_pull" {
 }
 
 resource "azurerm_role_assignment" "app_blobs" {
-  scope                = azurerm_storage_container.files.resource_manager_id
+  scope                = azurerm_storage_container.files.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_user_assigned_identity.app.principal_id
 }
@@ -214,7 +214,7 @@ resource "time_sleep" "roles" {
 }
 
 resource "azurerm_log_analytics_workspace" "this" {
-  name                = "log-${var.name}"
+  name                = "log-${var.name}-${local.sfx}" # deleted workspaces keep their name for a while
   location            = local.location
   resource_group_name = local.rg
   sku                 = "PerGB2018"
@@ -225,7 +225,7 @@ resource "azurerm_log_analytics_workspace" "this" {
 
 # ---------------------------------------------------------------------------------- application
 resource "azurerm_container_app_environment" "this" {
-  name                       = "cae-${var.name}"
+  name                       = "cae-${var.name}-${local.sfx}"
   location                   = local.location
   resource_group_name        = local.rg
   log_analytics_workspace_id = azurerm_log_analytics_workspace.this.id
