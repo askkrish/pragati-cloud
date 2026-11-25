@@ -1,0 +1,46 @@
+# Deploys one installation. Signs in to Azure with OpenID Connect (no stored passwords), builds
+# the image in the installation's registry, runs the migrations, then switches the app over.
+name: Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      installation:
+        description: Installation folder under infra/azure/envs
+        required: true
+        default: shared
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.installation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build the image in the registry
+        run: az acr build --registry "${{ vars.ACR_NAME }}" --image "pragati-cloud:${{ github.sha }}" .
+      - name: Run database migrations
+        run: |
+          az containerapp job update -g "${{ vars.RESOURCE_GROUP }}" -n "${{ vars.MIGRATION_JOB }}" \
+            --image "${{ vars.ACR_NAME }}.azurecr.io/pragati-cloud:${{ github.sha }}"
+          run=$(az containerapp job start -g "${{ vars.RESOURCE_GROUP }}" -n "${{ vars.MIGRATION_JOB }}" --query name -o tsv)
+          for i in $(seq 1 60); do
+            status=$(az containerapp job execution show -g "${{ vars.RESOURCE_GROUP }}" -n "${{ vars.MIGRATION_JOB }}" \
+              --job-execution-name "$run" --query properties.status -o tsv)
+            echo "migration: $status"
+            [ "$status" = "Succeeded" ] && exit 0
+            [ "$status" = "Failed" ] && exit 1
+            sleep 10
+          done
+          exit 1
+      - name: Switch the app to the new image
+        run: |
+          az containerapp update -g "${{ vars.RESOURCE_GROUP }}" -n "${{ vars.CONTAINER_APP }}" \
+            --image "${{ vars.ACR_NAME }}.azurecr.io/pragati-cloud:${{ github.sha }}"

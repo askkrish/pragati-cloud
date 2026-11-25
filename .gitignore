@@ -1,0 +1,11 @@
+node_modules/
+dist/
+var/
+*.log
+.env
+.env.*
+!.env.example
+.terraform/
+*.tfstate*
+backend.hcl
+*.tfvars

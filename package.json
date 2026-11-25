@@ -1,0 +1,51 @@
+{
+  "name": "pragati-cloud",
+  "version": "0.1.0",
+  "description": "Pragati Cloud: a community management platform each association names as its own",
+  "scripts": {
+    "db:setup": "tsx scripts/db-setup.ts",
+    "db:migrate": "tsx db/migrate.ts",
+    "seed": "tsx seed/samples.ts",
+    "dev": "tsx watch server/src/main.ts",
+    "dev:web": "vite web",
+    "build": "vite build web && tsc -p tsconfig.json --noEmit && npm run build:server",
+    "start": "node dist/server/main.js",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:server": "esbuild server/src/main.ts db/migrate.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outdir=dist/server --entry-names=[name]",
+    "platform": "tsx scripts/platform.ts"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@azure/identity": "^4.14.1",
+    "@azure/storage-blob": "^12.34.0",
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.9",
+    "@fastify/rate-limit": "^11.3.0",
+    "@fastify/static": "^10.1.12",
+    "@fontsource/baloo-thambi-2": "^5.3.0",
+    "@fontsource/mukta-malar": "^5.3.0",
+    "fastify": "^5.12.8",
+    "pg": "^8.23.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.9",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.1",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "esbuild": "^0.28.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}
