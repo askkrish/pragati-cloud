@@ -15,6 +15,7 @@ import * as engine from '../server/src/services/approvals.ts';
 import { writeAudit } from '../server/src/services/audit.ts';
 import { importUnits } from '../server/src/services/import-units.ts';
 import { seedOperations } from './operations.ts';
+import { seedProcurement } from './procurement.ts';
 
 const appUrl = process.env.DATABASE_URL_APP ?? 'postgres://pragati_web:pragati-dev-only@localhost:5433/pragati_dev';
 const platformUrl = process.env.DATABASE_URL_PLATFORM ?? 'postgres://pragati_ops:pragati-dev-only@localhost:5433/pragati_dev';
@@ -330,7 +331,7 @@ await palmMeadows();
 // demo always shows recent days.
 for (const [slug, n] of [['maple-court', 101], ['riverside-greens', 202], ['palm-meadows', 303]] as const) {
   const t = (await platform.query(`select id from app.tenants where slug = $1 and is_demo`, [slug])).rows[0];
-  if (t) await withTenant(pool, t.id, tx => seedOperations(tx, slug, n));
+  if (t) await withTenant(pool, t.id, async tx => { await seedOperations(tx, slug, n); await seedProcurement(tx, slug); });
 }
 
 // On the pilot, the app's own Azure address shows Palm Meadows until communities have their own domains.

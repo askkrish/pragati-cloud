@@ -24,4 +24,6 @@ JAOA Pragati runs one 50-flat building. It keeps the whole workspace as one JSON
 
 Done in Phase 2, module 1 (operations): routines with versioned schedules, missed and late work, skips with reasons, blocked checks raising work orders, service requests with owner-visible and staff-only updates, incidents, maintenance, projects, and the asset and AMC register.
 
-Still to come: procurement and quotations, vendor review, finance ledger and treasury, notices, records library, reports and weekly packs, Ask Pragathi, and the Tamil PDF layouts. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.
+Done in module 2 (procurement): vendors, quotations with the GST basis and terms, like-for-like comparison checks, single-quotation justification, vendor choice through approvals, and vendor reviews. JAOA's AI comparison and public vendor research come with Ask Pragathi.
+
+Still to come: finance ledger and treasury, notices, records library, reports and weekly packs, Ask Pragathi, and the Tamil PDF layouts. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.

@@ -31,6 +31,17 @@ Carried over from JAOA Pragati's daily operations, projects, service requests an
 | Assets and renewals | Lifts, generators, pumps, STPs and other equipment by place, with AMCs, warranties, insurance, licences and inspections. Renewing keeps the old record; overdue and due-soon items show on the home page. |
 | Access | Operations permissions per role and per block: committee members see, facility managers set up and assign, staff without full view see only what is given to them. |
 
+## Phase 2, module 2: procurement
+
+| Area | What works |
+| --- | --- |
+| Vendors | A directory per community with kinds of work, contacts and GSTIN; vendors can be put on hold or blocked, with the reason recorded. |
+| Quotations | Recorded against a work order with the GST basis, scope, exclusions, time, warranty, validity and payment terms, and the quotation itself. A revised quotation replaces the earlier one, which is kept. |
+| Comparison | Side by side, with the total including GST where it can be known. No quotation is called the lowest until all show the same GST basis, and the terms each one leaves out are listed for follow-up. |
+| Choosing a vendor | A reason is always recorded; a single quotation needs a justification; lapsed quotations and blocked vendors cannot be chosen. The choice goes through the approval rules as "choosing a vendor", carrying the comparison. |
+| Reviews | Quality, time and value scores after the work is done; a low score needs a comment. |
+
+
 
 ## Running it locally
 
@@ -45,7 +56,7 @@ npm run build && PRAGATI_DEV_SHOW_OTP=1 npm start
 
 Open http://maple-court.localhost:8080, http://riverside-greens.localhost:8080 or http://palm-meadows.localhost:8080. Sign in as an administrator with 90000 10001, 90000 20001 or 90000 30001; in development the code is shown on screen. All sample data is invented.
 
-`npm test` runs 66 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
+`npm test` runs 69 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
 
 ## Layout
 

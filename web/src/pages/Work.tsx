@@ -4,12 +4,13 @@ import { api, rupees, shortDate } from '../api.ts';
 import { can, useApp, type Me } from '../main.tsx';
 import { ErrorNote, Link, Loading, navigate, PageHead, Sheet, useAction, useApi, usePath } from '../ui.tsx';
 import type { TreeNode } from './Home.tsx';
+import { CATEGORY } from './labels.ts';
+import { Quotations, seesProcurement } from './Procurement.tsx';
+export { CATEGORY };
 
 export const isStaff = (me: Me) => ['operations.view', 'operations.update', 'operations.manage'].some(p => can(me, p));
 const seesAll = (me: Me) => can(me, 'operations.view') || can(me, 'operations.manage');
 
-export const CATEGORY: Record<string, string> = { security: 'Security', housekeeping: 'Housekeeping', garden: 'Garden', electrical: 'Electrical',
-  plumbing: 'Plumbing', lifts: 'Lifts', water: 'Water', fire_safety: 'Fire safety', pool: 'Pool', waste: 'Waste', general: 'General' };
 const DAY_STATUS: Record<string, string> = { done: 'Done', skipped: 'Skipped', blocked: 'Blocked', in_progress: 'Started', missed: 'Missed',
   due: 'Due now', upcoming: 'Later' };
 export const WORK_STATUS: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In progress', on_hold: 'On hold', done: 'Done',
@@ -52,7 +53,8 @@ function PersonSelect({ value, onChange, label, people, none = 'Nobody yet' }: {
 export function WorkTabs() {
   const { me } = useApp();
   const path = usePath().split('?')[0];
-  const tabs = [['/work', 'Today'], ['/work/orders', 'Work orders'], ['/work/routines', 'Routines'], ...(seesAll(me) ? [['/work/assets', 'Assets and renewals']] : [])];
+  const tabs = [['/work', 'Today'], ['/work/orders', 'Work orders'], ['/work/routines', 'Routines'], ...(seesAll(me) ? [['/work/assets', 'Assets and renewals']] : []),
+    ...(seesProcurement(me) ? [['/work/vendors', 'Vendors']] : [])];
   return <nav className="tabs" aria-label="Operations">
     {tabs.map(([to, label]) => <Link key={to} to={to} className="button" aria-current={(to === '/work' ? path === to : path.startsWith(to)) ? 'page' : undefined}>{label}</Link>)}
   </nav>;
@@ -225,6 +227,7 @@ export function WorkOrderView({ id }: { id: string }) {
         const r = await api.post(`/api/work/${id}/approval`, {}); refreshMe(); navigate(`/approvals/${r.id}`); })}>Send for approval</button>}
     </div>}
     <ErrorNote error={act.error} />
+    {staffView && seesProcurement(me) && <Quotations workId={id} onChange={reload} />}
     <section>
       <header><h2>Updates</h2></header>
       <ol className="trail">{w.updates.map((u: any) => <li key={u.id} className={`k-${u.kind}${u.staff_only ? ' staff' : ''}`}>

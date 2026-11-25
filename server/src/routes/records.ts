@@ -5,7 +5,7 @@ import { fail, forbidden, notFound } from '../errors.ts';
 import { saveUpload } from '../services/files.ts';
 import { idParam, z } from './z.ts';
 
-const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract'] as const;
+const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation'] as const;
 const OPS = ['operations.view', 'operations.update', 'operations.manage'];
 
 export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Services) {
@@ -18,6 +18,8 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
       if (!home && !OPS.some(p => c.actor.canAnywhere(p))) forbidden();
     } else if (purpose === 'contract') {
       if (!c.actor.canAnywhere('operations.manage')) forbidden();
+    } else if (purpose === 'quotation') {
+      if (!c.actor.canAnywhere('procurement.manage')) forbidden();
     } else c.actor.require('files.upload', null);
     const part = await req.file() ?? fail(400, 'Choose a file.', 'invalid');
     return saveUpload(c, svc.storage, part!, purpose);
@@ -33,6 +35,7 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
         || (f.purpose === 'ownership_document' && actor.canAnywhere('people.view'))
         || (f.purpose === 'other' && actor.canAnywhere('audit.view'))
         || (f.purpose === 'contract' && staff)
+        || (f.purpose === 'quotation' && (actor.canAnywhere('procurement.view') || actor.canAnywhere('procurement.manage')))
         || (f.purpose === 'work_photo' && (staff || !!await one(tx, `select 1 from app.work_updates u
               join app.work_orders w on w.tenant_id = u.tenant_id and w.id = u.work_order_id
              where u.file_id = $1 and (w.assignee_person_id = $2 or (w.raised_by = $2 and not u.staff_only))
@@ -63,7 +66,8 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
   const EXPORT_TABLES = ['tenants', 'property_nodes', 'unit_types', 'units', 'parking_slots', 'meters', 'facilities', 'people',
     'ownerships', 'occupancies', 'roles', 'memberships', 'committees', 'committee_seats', 'approval_rules',
     'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'assets', 'asset_contracts',
-    'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'files', 'audit_events'];
+    'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'vendors', 'quotes', 'vendor_selections', 'vendor_reviews',
+    'files', 'audit_events'];
 
   app.get('/api/export', async (req, reply) => {
     const data = await run.auth(req, async ({ tx, actor, audit, tenant }) => {

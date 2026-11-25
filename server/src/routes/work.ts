@@ -24,7 +24,7 @@ async function today(tx: Tx) {
   return localNow((await one(tx, `select timezone from app.tenants`))!.timezone).day;
 }
 
-async function loadWork(tx: Tx, actor: Actor, id: string) {
+export async function loadWork(tx: Tx, actor: Actor, id: string) {
   const w = await one(tx, `select w.*, n.ancestor_ids, ${PLACE()} as place, u.label as unit, a.name as asset, rt.ref as routine_ref,
       rp.full_name as raised_by_name, ap.full_name as assignee,
       ar.ref as approval_ref, ar.status as approval_status

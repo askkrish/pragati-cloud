@@ -10,6 +10,7 @@ import { PlaceView, UnitView } from './pages/Places.tsx';
 import { ApprovalList, ApprovalNew, ApprovalView } from './pages/Approvals.tsx';
 import { Committees, PeopleList, PersonView } from './pages/People.tsx';
 import { Activity, MoreMenu, Roles, Rules, SettingsPage } from './pages/Settings.tsx';
+import { VendorList, VendorView } from './pages/Procurement.tsx';
 import { AssetList, AssetNew, AssetView, isStaff, Requests, RoutineList, RoutineNew, RoutineView, Today, WorkOrderNew, WorkOrders,
   WorkOrderView } from './pages/Work.tsx';
 
@@ -86,6 +87,8 @@ function Frame() {
   else if (path === '/work/assets') page = <AssetList />;
   else if (path === '/work/assets/new') page = <AssetNew />;
   else if ((r = m(/^\/work\/assets\/([\w-]+)$/))) page = <AssetView id={r[1]} />;
+  else if (path === '/work/vendors') page = <VendorList />;
+  else if ((r = m(/^\/work\/vendors\/([\w-]+)$/))) page = <VendorView id={r[1]} />;
   else if (path === '/requests') page = <Requests />;
   else if (path === '/more') page = <MoreMenu />;
   else if (path === '/settings') page = <SettingsPage />;

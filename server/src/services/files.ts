@@ -19,6 +19,7 @@ const ALLOWED: Record<string, string[]> = {
   other: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'],
   work_photo: ['image/png', 'image/jpeg', 'image/webp'],
   contract: ['application/pdf', 'image/png', 'image/jpeg'],
+  quotation: ['application/pdf', 'image/png', 'image/jpeg'],
 };
 
 export async function saveUpload(c: Ctx, storage: Storage, part: MultipartFile, purpose: string) {
