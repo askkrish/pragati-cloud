@@ -12,7 +12,8 @@ set -euo pipefail
 SUB=326ad94b-cd4a-4d88-82eb-b931b1414725
 LOC=centralindia
 TFSA=pragatitfd7i0sk
-SUBJECT=repo:askkrish/pragati-cloud:environment:pilot
+# GitHub sends either form of the repository identity in its token; trust both.
+SUBJECTS=("repo:askkrish/pragati-cloud:environment:pilot" "repo:askkrish@268327612/pragati-cloud@1471499440:environment:pilot")
 
 az account set --subscription "$SUB"
 echo "Registering services (a few minutes)..."
@@ -31,9 +32,12 @@ az storage container-rm create --storage-account "$TFSA" -g rg-pragati-tfstate -
 APP=$(az ad app list --display-name pragati-cloud-github-deploy --query "[0].appId" -o tsv)
 if [ -z "$APP" ]; then APP=$(az ad app create --display-name pragati-cloud-github-deploy --query appId -o tsv); fi
 az ad sp show --id "$APP" -o none 2>/dev/null || az ad sp create --id "$APP" -o none
-if ! az ad app federated-credential list --id "$APP" --query "[?subject=='$SUBJECT']" -o tsv | grep -q .; then
-  az ad app federated-credential create --id "$APP" --parameters "{\"name\":\"github-pilot\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"$SUBJECT\",\"audiences\":[\"api://AzureADTokenExchange\"]}" -o none
-fi
+for i in "${!SUBJECTS[@]}"; do
+  SUBJECT=${SUBJECTS[$i]}
+  if ! az ad app federated-credential list --id "$APP" --query "[?subject=='$SUBJECT'].name" -o tsv | grep -q .; then
+    az ad app federated-credential create --id "$APP" --parameters "{\"name\":\"github-pilot-$i\",\"issuer\":\"https://token.actions.githubusercontent.com\",\"subject\":\"$SUBJECT\",\"audiences\":[\"api://AzureADTokenExchange\"]}" -o none
+  fi
+done
 SP=$(az ad sp show --id "$APP" --query id -o tsv)
 RG=$(az group show -n rg-pragati-pilot --query id -o tsv)
 STATE=$(az storage account show -n "$TFSA" -g rg-pragati-tfstate --query id -o tsv)
