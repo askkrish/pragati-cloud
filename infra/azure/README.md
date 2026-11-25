@@ -13,7 +13,7 @@ Move a community to `modules/pragati` (Front Door with firewall, standby databas
 
 ## Production
 
-`modules/pragati` is one complete installation. The three folders under `envs/` use it for each hosting tier. Region: Central India, with geo-backups in South India.
+`modules/pragati` is one complete installation. The three folders under `envs/` use it for each hosting tier. Region: Central India, with geo-backups in South India (production). The pilot runs in South India.
 
 These files have not yet been applied to a subscription. CI runs `terraform fmt` and `terraform validate` on every push; the first apply will be done together with the person who owns the subscription.
 

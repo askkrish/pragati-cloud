@@ -8,6 +8,12 @@ variable "resource_group_name" {
   type        = string
 }
 
+variable "location" {
+  description = "Azure region for the pilot's resources; defaults to the resource group's region."
+  type        = string
+  default     = null
+}
+
 variable "image_tag" {
   description = "Container image tag, normally the git commit SHA."
   type        = string

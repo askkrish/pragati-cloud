@@ -26,15 +26,19 @@ data "azurerm_resource_group" "this" {
   name = var.resource_group_name
 }
 
+# Names get a fresh suffix if the pilot moves region, so new resources never collide with old ones.
 resource "random_string" "suffix" {
   length  = 5
   upper   = false
   special = false
+  keepers = {
+    location = coalesce(var.location, data.azurerm_resource_group.this.location)
+  }
 }
 
 locals {
   sfx      = random_string.suffix.result
-  location = data.azurerm_resource_group.this.location
+  location = coalesce(var.location, data.azurerm_resource_group.this.location)
   rg       = data.azurerm_resource_group.this.name
   tags     = merge({ product = "pragati-cloud", installation = var.name, hosting_tier = "pilot" }, var.tags)
   image    = "${azurerm_container_registry.this.login_server}/pragati-cloud:${var.image_tag}"

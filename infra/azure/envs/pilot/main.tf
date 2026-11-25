@@ -30,7 +30,9 @@ variable "image_tag" { type = string }
 module "pilot" {
   source              = "../../modules/pragati-pilot"
   resource_group_name = "rg-pragati-pilot"
-  image_tag           = var.image_tag
+  # South India (Chennai): Central India refused new free-tier PostgreSQL servers (SkuNotAvailable).
+  location  = "southindia"
+  image_tag = var.image_tag
 }
 
 output "app_url" { value = module.pilot.app_url }
