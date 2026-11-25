@@ -152,6 +152,8 @@ async function createCommunity(slug: string, brand: string, legal: string, rootK
   const id = (await platform.query(`select platform.create_tenant($1,$2,$3,'Chennai',$4,$5,$6,$7,$8) as id`,
     [slug, brand, legal, rootKind, rootName, adminName, adminPhone, [`${slug}.${baseDomain}`]])).rows[0].id as string;
   await withTenant(pool, id, tx => tx.query(`update app.tenants set primary_color = $1, languages = $2`, [color, languages]));
+  // Sample communities are demos: made-up data, sign-in code shown on screen, a banner on every page.
+  await platform.query(`select platform.set_demo($1, true)`, [id]);
   return id;
 }
 
@@ -322,6 +324,15 @@ async function palmMeadows() {
 await mapleCourt();
 await riversideGreens();
 await palmMeadows();
+
+// On the pilot, the app's own Azure address shows Palm Meadows until communities have their own domains.
+const demoHost = process.env.PRAGATI_DEMO_HOST?.toLowerCase();
+if (demoHost) {
+  const t = (await platform.query(`select id from app.tenants where slug = 'palm-meadows'`)).rows[0];
+  const taken = (await platform.query(`select 1 from app.tenant_domains where domain = $1`, [demoHost])).rowCount;
+  if (t && !taken) await platform.query(`select platform.add_domain($1, $2, false)`, [t.id, demoHost]);
+  console.log(`${demoHost} shows Palm Meadows Pragati.`);
+}
 console.log((await platform.query('select platform_name, locations, units, people, active_members, pending_approvals from platform.tenant_usage()')).rows);
 await pool.end();
 await platform.end();

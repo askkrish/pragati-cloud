@@ -40,7 +40,8 @@ export async function migrate(ownerUrl: string, log: (m: string) => void = conso
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run directly (not when bundled into another entry point).
+if (/[\\/]migrate\.(ts|js)$/.test(process.argv[1] ?? '')) {
   const url = process.env.DATABASE_URL_OWNER;
   if (!url) throw new Error('Set DATABASE_URL_OWNER');
   await migrate(url);

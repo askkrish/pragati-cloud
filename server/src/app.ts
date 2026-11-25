@@ -22,7 +22,7 @@ import { createStorage, type Storage } from './services/storage.ts';
 export const SESSION_COOKIE = 'pragati_session';
 
 export type Tenant = { id: string; slug: string; brand_name: string; platform_name: string; primary_color: string;
-  logo_file_id: string | null; languages: string[]; assistant_name: string; status: string };
+  logo_file_id: string | null; languages: string[]; assistant_name: string; status: string; is_demo: boolean };
 
 export type Ctx = {
   tx: Tx;
@@ -44,6 +44,14 @@ export type Runner = {
   // For sign-in and public pages: a community-bound transaction with no person.
   open: <T>(req: FastifyRequest, fn: (tx: Tx, tenant: Tenant, meta: RequestMeta) => Promise<T>) => Promise<T>;
 };
+
+// The web address the visitor used. Behind Front Door the original address arrives in
+// X-Forwarded-Host (and requests without Front Door's id are refused, so it cannot be forged);
+// otherwise the Host header is used as sent, never a forwarded header a visitor could add.
+export function requestHost(req: FastifyRequest): string {
+  const raw = config.frontDoorId ? String(req.headers['x-forwarded-host'] ?? '') : String(req.headers.host ?? '');
+  return raw.split(',')[0].trim().toLowerCase().replace(/:\d+$/, '');
+}
 
 // The visitor's address. Behind Azure Front Door, X-Azure-ClientIP is set by Front Door itself and
 // cannot be supplied by the visitor, unlike the left-most X-Forwarded-For entry.
@@ -72,7 +80,8 @@ export async function buildApp(services: Partial<Services> & { pool: pg.Pool }) 
   const svc: Services = { sms: createSms(), storage: createStorage(), ...services };
   const app = Fastify({
     logger: config.isProd ? { level: 'info', redact: ['req.headers.cookie', 'req.headers.authorization'] } : false,
-    trustProxy: config.trustProxy,
+    // Trust exactly the proxies we run behind (by hop count), never addresses a visitor adds.
+    trustProxy: config.trustProxyHops > 0 ? (_addr: string, hop: number) => hop < config.trustProxyHops : false,
     bodyLimit: 2 * 1024 * 1024,
     genReqId: () => randomUUID(),
   });
@@ -96,7 +105,7 @@ export async function buildApp(services: Partial<Services> & { pool: pg.Pool }) 
     if (req.url === '/healthz') return;
     if (config.frontDoorId && req.headers['x-azure-fdid'] !== config.frontDoorId)
       return reply.code(403).send({ error: 'Please use the community\'s web address.', code: 'direct_access' });
-    req.tenant = await resolveTenant(svc.pool, req.hostname.toLowerCase());
+    req.tenant = await resolveTenant(svc.pool, requestHost(req));
     if (!req.url.startsWith('/api/')) return;
     if (!req.tenant) return reply.code(404).send({ error: 'No community is set up at this address.', code: 'no_community' });
     if (req.tenant.status !== 'active') return reply.code(403).send({ error: 'This community\'s platform is not active.', code: 'inactive' });

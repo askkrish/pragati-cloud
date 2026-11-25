@@ -11,7 +11,7 @@ import { ApprovalList, ApprovalNew, ApprovalView } from './pages/Approvals.tsx';
 import { Committees, PeopleList, PersonView } from './pages/People.tsx';
 import { Activity, MoreMenu, Roles, Rules, SettingsPage } from './pages/Settings.tsx';
 
-export type Community = { platformName: string; brandName: string; primaryColor: string; languages: string[]; assistantName: string; hasLogo: boolean };
+export type Community = { platformName: string; brandName: string; primaryColor: string; languages: string[]; assistantName: string; hasLogo: boolean; isDemo: boolean };
 export type Me = { person: { id: string; name: string; phone: string }; roles: { key: string; name: string; scope: string | null }[];
   permissions: string[]; homes: any[]; committees: any[]; waitingForMyVote: number };
 
@@ -94,7 +94,7 @@ function Frame() {
         {tab.icon}<span>{tab.label}</span>{tab.badge ? <span className="badge" aria-label={`${tab.badge} waiting`}>{tab.badge}</span> : null}
       </Link>)}
     </nav>
-    <main id="main">{page}</main>
+    <main id="main">{community.isDemo && <p className="note demo-note">This is a demo community. Every name, number and amount is made up.</p>}{page}</main>
   </div>;
 }
 

@@ -29,6 +29,7 @@ export function SignIn({ community, onSignedIn }: { community: Community; onSign
     <div className="hero">
       <div className="platform-name">{community.platformName}</div>
       <p>Your community's homes, committees and decisions, in one place.</p>
+      {community.isDemo && <p className="demo-tag">Demo with made-up data. Try a committee member's number, such as 90000 30001.</p>}
     </div>
     <div className="card"><div>
       {!challenge ? <form className="form" onSubmit={send}>
@@ -44,7 +45,7 @@ export function SignIn({ community, onSignedIn }: { community: Community; onSign
       </form> : <form className="form" onSubmit={verify}>
         <h2>{t('Enter the 6-digit code')}</h2>
         <p className="quiet">If {digits.slice(-10, -5)} {digits.slice(-5)} has access, the code is on its way. It works for 5 minutes.</p>
-        {challenge.devCode && <p className="note">Development mode: the code is {challenge.devCode}</p>}
+        {challenge.devCode && <p className="note">{community.isDemo ? 'Demo community: no SMS is sent. Your code is' : 'Development mode: the code is'} {challenge.devCode}</p>}
         <input className="code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
           onChange={e => setCode(e.target.value.replace(/\D/g, ''))} aria-label="6-digit code" autoFocus />
         <ErrorNote error={error} />

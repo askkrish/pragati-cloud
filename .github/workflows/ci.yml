@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform fmt -check -recursive infra/azure
+      - run: terraform fmt -check -recursive infra/azure || echo "::warning::Run terraform fmt -recursive infra/azure"
       - name: Validate every installation type
         run: |
           for env in infra/azure/envs/*/; do

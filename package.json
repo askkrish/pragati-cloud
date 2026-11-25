@@ -12,7 +12,7 @@
     "start": "node dist/server/main.js",
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:server": "esbuild server/src/main.ts db/migrate.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outdir=dist/server --entry-names=[name]",
+    "build:server": "esbuild server/src/main.ts db/migrate.ts db/bootstrap.ts seed/samples.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outdir=dist/server --entry-names=[name]",
     "platform": "tsx scripts/platform.ts"
   },
   "license": "UNLICENSED",

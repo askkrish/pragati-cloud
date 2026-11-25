@@ -258,3 +258,6 @@ table.grid tr.click:hover td { background: var(--brand-wash); }
 .name-preview { font: 700 var(--step-3)/1.1 var(--display); color: var(--brand-ink); }
 .perm-group { display: grid; gap: 6px; }
 .perm-group h3 { font-size: 1.05rem; }
+
+.demo-note { font-size: 0.95rem; }
+.signin .hero .demo-tag { display: inline-block; padding: 8px 12px; border-radius: var(--radius-s); background: color-mix(in oklab, white 16%, transparent); max-width: none; }

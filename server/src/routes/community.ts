@@ -12,7 +12,7 @@ export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Se
   app.get('/api/public/community', async req => {
     const t = req.tenant!;
     return { platformName: t.platform_name, brandName: t.brand_name, primaryColor: t.primary_color,
-      languages: t.languages, assistantName: t.assistant_name, hasLogo: !!t.logo_file_id };
+      languages: t.languages, assistantName: t.assistant_name, hasLogo: !!t.logo_file_id, isDemo: t.is_demo };
   });
 
   app.get('/api/public/logo', async (req, reply) => {

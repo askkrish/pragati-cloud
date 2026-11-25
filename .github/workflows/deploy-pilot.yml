@@ -1,0 +1,105 @@
+# Tests, then deploys the pilot to Azure. Signs in with OpenID Connect: GitHub proves which
+# repository and environment is asking, so no Azure password or key is stored anywhere.
+name: Deploy pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-pilot
+  cancel-in-progress: false
+
+env:
+  ARM_CLIENT_ID: __CLIENT_ID__
+  ARM_TENANT_ID: __TENANT_ID__
+  ARM_SUBSCRIPTION_ID: 326ad94b-cd4a-4d88-82eb-b931b1414725
+  ARM_USE_OIDC: "true"
+  TF_IN_AUTOMATION: "1"
+  TF_DIR: infra/azure/envs/pilot
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pgadmin
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pgadmin" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_ADMIN_URL: postgres://pgadmin:ci-only@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.ARM_CLIENT_ID }}
+          tenant-id: ${{ env.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+      - run: az config set extension.use_dynamic_install=yes_without_prompt extension.dynamic_install_allow_preview=true
+
+      - name: Terraform init
+        run: terraform -chdir=$TF_DIR init -input=false
+
+      - name: Registry
+        run: |
+          terraform -chdir=$TF_DIR apply -auto-approve -input=false -var image_tag=$IMAGE_TAG \
+            -target=module.pilot.azurerm_container_registry.this -target=module.pilot.azurerm_role_assignment.deployer_push
+
+      - name: Build and push the image
+        run: |
+          ACR=$(az acr list -g rg-pragati-pilot --query "[0].name" -o tsv)
+          SERVER=$(az acr show -n "$ACR" --query loginServer -o tsv)
+          for i in $(seq 1 12); do az acr login --name "$ACR" && break; echo "waiting for registry access"; sleep 15; done
+          docker build -t "$SERVER/pragati-cloud:$IMAGE_TAG" .
+          for i in $(seq 1 6); do docker push "$SERVER/pragati-cloud:$IMAGE_TAG" && break; sleep 15; done
+
+      - name: Database and jobs (before the app switches to the new version)
+        run: |
+          terraform -chdir=$TF_DIR apply -auto-approve -input=false -var image_tag=$IMAGE_TAG \
+            -target=module.pilot.azurerm_container_app_job.db
+
+      - name: Bring the database up to date
+        run: |
+          ./infra/azure/run-job.sh rg-pragati-pilot caj-pragati-pilot-db
+
+      - name: Switch the app to the new version
+        run: terraform -chdir=$TF_DIR apply -auto-approve -input=false -var image_tag=$IMAGE_TAG
+
+      - name: Load the demo communities (skips any that exist)
+        run: ./infra/azure/run-job.sh rg-pragati-pilot caj-pragati-pilot-seed
+
+      - name: Check the live site
+        run: |
+          URL=$(terraform -chdir=$TF_DIR output -raw app_url)
+          for i in $(seq 1 20); do
+            if curl -fsS "$URL/healthz" && curl -fsS "$URL/api/public/community"; then echo; echo "Live at $URL"; exit 0; fi
+            sleep 15
+          done
+          exit 1

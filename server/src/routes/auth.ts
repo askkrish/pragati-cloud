@@ -22,11 +22,12 @@ export async function authRoutes(app: FastifyInstance, run: Runner, svc: Service
       const r = await one(tx, 'select * from auth_api.otp_start($1, $2, $3, $4, $5, $6)',
         [tenant.id, challengeId, phone, otpHash(challengeId, code), config.otpTtlSeconds, clientIp(req)]);
       if (r.status === 'rate_limited') fail(429, 'Too many codes were requested. Please wait 15 minutes.', 'rate_limited');
-      return { ...r, platform: tenant.platform_name };
+      return { ...r, platform: tenant.platform_name, demo: tenant.is_demo };
     });
-    if (res.deliver) await svc.sms.sendOtp(phone, code, res.platform);
+    // Demo communities (made-up data only) show the code on screen instead of sending an SMS.
+    if (res.deliver && !res.demo) await svc.sms.sendOtp(phone, code, res.platform);
     return { challengeId, message: 'If this number has access, a 6-digit code is on its way.',
-      ...(config.showOtpInResponse && res.deliver ? { devCode: code } : {}) };
+      ...((config.showOtpInResponse || res.demo) && res.deliver ? { devCode: code } : {}) };
   });
 
   app.post('/api/auth/otp/verify', strict, async (req, reply) => {

@@ -1,4 +1,5 @@
 import { config } from '../config.ts';
+import { AppError } from '../errors.ts';
 
 export interface SmsSender {
   sendOtp(phoneE164: string, code: string, platformName: string): Promise<void>;
@@ -26,6 +27,15 @@ class Msg91Sms implements SmsSender {
   }
 }
 
+// Until SMS is set up, real communities cannot sign in; demo communities show the code on screen.
+class NoSms implements SmsSender {
+  async sendOtp(): Promise<void> {
+    throw new AppError(503, 'Sign-in by SMS is not switched on yet for this community. Please contact the association office.', 'sms_off');
+  }
+}
+
 export function createSms(): SmsSender {
-  return config.sms.provider === 'msg91' ? new Msg91Sms() : new ConsoleSms();
+  if (config.sms.provider === 'msg91') return new Msg91Sms();
+  if (config.sms.provider === 'none') return new NoSms();
+  return new ConsoleSms();
 }
