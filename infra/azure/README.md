@@ -1,5 +1,18 @@
 # Azure set-up
 
+## The pilot (running now)
+
+`modules/pragati-pilot`, applied from `envs/pilot` by `.github/workflows/deploy-pilot.yml` on every push to `main`. It runs on Azure's free allowances: PostgreSQL B1ms (free for 12 months), Container Apps that scale to zero (within the monthly free grant), a Standard registry (free for 12 months), identity-only Blob Storage and capped logs. No Front Door, standby database or Key Vault. The database is private to the app's network. Expect well under ₹500 a month in the first year.
+
+- One-time preparation: `setup-pilot.sh`, run by the subscription owner in Cloud Shell. It registers services, creates `rg-pragati-pilot` and `rg-pragati-tfstate`, and creates the deployment identity `pragati-cloud-github-deploy`. That identity has no secret; only GitHub Actions in the `pilot` environment of askkrish/pragati-cloud can use it, and only inside those two resource groups.
+- Each deploy: tests → build and push the image → bring the database up to date (job `caj-pragati-pilot-db`) → switch the app → load the demo communities (job `caj-pragati-pilot-seed`, skips existing) → check the live site.
+- SMS is off (`SMS_PROVIDER=none`) until MSG91 and DLT registration are ready, so only demo communities (made-up data, code shown on screen) can sign in.
+- Until a domain is set up, the app's own Azure address shows the Palm Meadows demo.
+
+Move a community to `modules/pragati` (Front Door with firewall, standby database, Key Vault, private endpoints) before it pays or stores data that a breach would harm.
+
+## Production
+
 `modules/pragati` is one complete installation. The three folders under `envs/` use it for each hosting tier. Region: Central India, with geo-backups in South India.
 
 These files have not yet been applied to a subscription. CI runs `terraform fmt` and `terraform validate` on every push; the first apply will be done together with the person who owns the subscription.
