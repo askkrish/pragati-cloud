@@ -76,13 +76,15 @@ export async function operationsRoutes(app: FastifyInstance, run: Runner, _svc: 
   app.get('/api/ops/today', async req => run.auth(req, async ({ tx, actor }) => {
     if (!isStaff(actor)) forbidden();
     const now = await communityNow(tx);
-    const q = z.object({ date: date.optional() }).parse(req.query);
+    const q = z.object({ date: date.optional(), place: uuid.optional() }).parse(req.query);
     const day = q.date ?? now.day;
     if (Math.abs(daysBetween(now.day, day)) > 400) fail(400, 'Choose a date within a year.', 'invalid');
-    const routines = await visibleRoutines(tx, actor);
+    // A place's QR code opens the checks for that place and the places inside it.
+    const routines = (await visibleRoutines(tx, actor)).filter(r => !q.place || r.node_id === q.place || (r.ancestor_ids ?? []).includes(q.place));
+    const placeName = q.place ? (await one(tx, `select name from app.property_nodes where id = $1`, [q.place]))?.name ?? null : null;
     const rows = await routineDays(tx, routines, day, day, now);
     const count = (s: string) => rows.filter(r => r.status === s).length;
-    return { date: day, today: now.day, minute: now.minute,
+    return { date: day, today: now.day, minute: now.minute, place: q.place ? { id: q.place, name: placeName } : null,
       counts: { scheduled: rows.length, done: count('done'), missed: count('missed'), due: count('due'), skipped: count('skipped'),
         blocked: count('blocked'), late: rows.filter(r => r.late).length },
       rows: rows.map(r => ({ ...r, canRecord: canRecord(actor, routines.find(x => x.id === r.routine_id)) && day <= now.day })) };
@@ -96,7 +98,7 @@ export async function operationsRoutes(app: FastifyInstance, run: Runner, _svc: 
     const days = await routineDays(tx, routines, addDays(now.day, -29), now.day, now);
     return routines.map(r => {
       const mine = days.filter(d => d.routine_id === r.id && d.status !== 'upcoming' && d.status !== 'due');
-      return { id: r.id, ref: r.ref, title: r.title, category: r.category, place: r.place, asset: r.asset, assignee: r.assignee,
+      return { id: r.id, ref: r.ref, title: r.title, category: r.category, place: r.place, node_id: r.node_id, ancestor_ids: r.ancestor_ids, asset: r.asset, assignee: r.assignee,
         backup: r.backup, schedule: scheduleSummary(versions.filter(v => v.routine_id === r.id), now.day),
         last30: { due: mine.length, done: mine.filter(d => d.status === 'done').length, missed: mine.filter(d => d.status === 'missed').length,
           late: mine.filter(d => d.late).length } };

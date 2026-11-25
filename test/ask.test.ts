@@ -14,10 +14,11 @@ const PLAN: Record<string, { name: string; input?: any }[]> = {
   dues: [{ name: 'my_dues' }, { name: 'about_me' }],
   notices: [{ name: 'notices' }],
   sneaky: [{ name: 'work_order', input: { id: '../finance/overview' } }, { name: 'no_such_tool' }],
+  leak: [{ name: 'draft_service_request', input: { title: 'Water leaking from the bathroom ceiling', category: 'plumbing', urgent: true, details: 'Since this morning' } }],
 };
 
 process.env.ANTHROPIC_API_KEY = 'test-key';
-process.env.ASK_DAILY_LIMIT = '6';
+process.env.ASK_DAILY_LIMIT = '7';
 process.env.ASK_MODEL = 'claude-test';
 
 let h: Harness;
@@ -61,7 +62,7 @@ test('the assistant is off until the community switches it on, and only settings
   ok(await C.admin.call('PATCH', '/api/ask/settings', { enabled: true }));
   const s = ok(await owner.get('/api/ask/status'));
   assert.equal(s.available, true);
-  assert.equal(s.remainingToday, 6);
+  assert.equal(s.remainingToday, 7);
   assert.equal(seen.length, 0, 'nothing went to the AI provider while it was off');
 });
 
@@ -97,16 +98,35 @@ test('lookups cannot be steered to other addresses, and unknown lookups are refu
   assert.match(r.answer, /No such lookup/);
 });
 
+test('the assistant drafts a request for the asker\'s own home, which they send themselves; answers can be rated', async () => {
+  const before = (await h.asOwner(C.id, `select count(*)::int as n from app.work_orders`))[0].n;
+  const r = ok(await owner.post('/api/ask', { question: 'there is a leak in my bathroom, please raise it' }));
+  assert.equal(r.draft.unitId, C.unitA.id);
+  assert.equal(r.draft.category, 'plumbing');
+  assert.equal(r.draft.urgent, true);
+  assert.equal((await h.asOwner(C.id, `select count(*)::int as n from app.work_orders`))[0].n, before, 'nothing is raised until the person sends it');
+  ok(await owner.post('/api/work', { kind: 'request', unitId: r.draft.unitId, title: r.draft.title, category: r.draft.category }));
+  // The admin has no home: no draft, and the assistant is told why.
+  const a = ok(await C.admin.post('/api/ask', { question: 'leak at my place' }));
+  assert.equal(a.draft, null);
+  assert.match(a.answer, /no home on record/);
+  ok(await owner.post(`/api/ask/${r.id}/rating`, { helpful: true }));
+  ok(await C.admin.post(`/api/ask/${r.id}/rating`, { helpful: false }), 404);
+  const usage = ok(await C.admin.get('/api/ask/usage'));
+  assert.equal(usage.helpful, 1);
+  ok(await owner.get('/api/ask/usage'), 403);
+});
+
 test('each question is logged with its cost for the asker alone, and the daily limit holds', async () => {
   const mine = ok(await owner.get('/api/ask/history'));
-  assert.equal(mine.length, 3);
+  assert.equal(mine.length, 4);
   assert.ok(mine.every((q: any) => q.answer));
   const [row] = await h.asOwner(C.id, `select lookups, model, input_tokens, output_tokens from app.ask_questions where question = 'what are my dues?'`);
   assert.deepEqual(row.lookups.sort(), ['about_me', 'my_dues']);
   assert.equal(row.model, 'claude-test');
   assert.equal(row.input_tokens, 350);
   assert.equal(row.output_tokens, 40);
-  assert.equal(ok(await C.admin.get('/api/ask/history')).length, 1);
+  assert.equal(ok(await C.admin.get('/api/ask/history')).length, 2);
 
   // Follow-ups carry the earlier turns.
   ok(await owner.post('/api/ask', { question: 'notices now', earlier: [{ q: 'what are my dues?', a: 'Nothing is due.' }] }));

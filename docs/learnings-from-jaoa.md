@@ -32,4 +32,6 @@ Done in module 4 (notices, records and packs): JAOA's notices, document register
 
 Done in module 5 (Ask Pragathi): JAOA's assistant, rebuilt so that it answers through the same API and permissions as the screens rather than from a copy of the workspace, with contact details removed, a community-level switch, per-person and per-community limits, and a log of every question with its cost.
 
+Done in modules 6 and 7, after a line-by-line check of JAOA's code: project delivery (requests for quotation, contract, change orders, milestones, handover), asset service logs, GST verification on vouchers, permits for terrace and renovation work, ageing decisions, search, QR labels, offline checks and an installable app, the end-of-day summary and the AGM pack, notice templates, voucher import, answer ratings and drafted requests in Ask Pragathi, and help and feedback.
+
 Everything in JAOA Pragati now has a home in Pragati Cloud. What remains before real communities: SMS sign-in (MSG91 and DLT), a custom domain, a Tamil review of the wording, a penetration test, a restore drill, and the data processing agreement. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.

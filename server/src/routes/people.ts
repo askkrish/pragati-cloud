@@ -37,7 +37,8 @@ export async function peopleRoutes(app: FastifyInstance, run: Runner, _svc: Serv
           where m.person_id = p.id and m.status = 'active') as roles,
         count(*) over ()::int as total
       from app.people p where p.archived_at is null
-        and ($1::text is null or p.full_name ilike '%' || $1 || '%' or p.phone_e164 like '%' || regexp_replace($1, '\\D', '', 'g') || '%')
+        and ($1::text is null or p.full_name ilike '%' || $1 || '%'
+             or (length(regexp_replace($1, '\\D', '', 'g')) >= 3 and p.phone_e164 like '%' || regexp_replace($1, '\\D', '', 'g') || '%'))
       order by lower(p.full_name) limit $2 offset $3`, [q.q?.trim() || null, q.limit, q.offset]);
     return { total: rows[0]?.total ?? 0, people: rows.map(({ total, ...r }) => r) };
   }));

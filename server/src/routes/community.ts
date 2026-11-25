@@ -10,6 +10,35 @@ import { z } from './z.ts';
 const LANGS = ['en', 'ta', 'hi', 'te', 'kn', 'ml'] as const;
 
 export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Services) {
+  // The installable app: a manifest and an icon in the community's own name and colour.
+  app.get('/manifest.webmanifest', async (req, reply) => {
+    const t = req.tenant;
+    if (!t) return reply.code(404).send('Not found');
+    return reply.header('content-type', 'application/manifest+json').header('cache-control', 'no-cache').send({
+      name: t.platform_name, short_name: t.brand_name.length <= 12 ? t.brand_name : 'Pragati', start_url: '/', scope: '/', display: 'standalone',
+      background_color: '#f3f4f2', theme_color: t.primary_color, lang: 'en-IN',
+      icons: [{ src: '/app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }, { src: '/app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }],
+    });
+  });
+  app.get('/app-icon.svg', async (req, reply) => {
+    const t = req.tenant;
+    const letter = (t?.brand_name ?? 'P').trim().charAt(0).toUpperCase().replace(/[<>&"']/g, '') || 'P';
+    const colour = /^#[0-9a-f]{6}$/i.test(t?.primary_color ?? '') ? t!.primary_color : '#1f4d7a';
+    return reply.header('content-type', 'image/svg+xml').header('cache-control', 'public, max-age=86400').send(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="96" fill="${colour}"/>` +
+      `<text x="256" y="338" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="260" fill="#fff">${letter}</text></svg>`);
+  });
+
+  // Help and feedback from any screen to the platform team.
+  app.post('/api/feedback', async req => run.auth(req, async ({ tx, actor }) => {
+    const b = z.object({ kind: z.enum(['problem', 'idea', 'question', 'praise']), body: z.string().trim().min(3, 'Write a few words').max(3000),
+      page: z.string().trim().max(200).optional() }).parse(req.body);
+    const recent = await one(tx, `select count(*)::int as n from app.feedback where person_id = $1 and created_at > now() - interval '1 hour'`, [actor.personId]);
+    if ((recent?.n ?? 0) >= 10) fail(429, 'Thank you: that is a lot of feedback in an hour. Please try again later.', 'limit');
+    await tx.query(`insert into app.feedback (person_id, kind, body, page) values ($1, $2, $3, $4)`, [actor.personId, b.kind, b.body, b.page ?? null]);
+    return { ok: true };
+  }));
+
   app.get('/api/public/community', async req => {
     const t = req.tenant!;
     return { platformName: t.platform_name, brandName: t.brand_name, primaryColor: t.primary_color,

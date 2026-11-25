@@ -3,7 +3,7 @@
 // Finance permissions apply community-wide. Owners and residents see only their own homes' dues.
 import type { FastifyInstance } from 'fastify';
 import type { Actor } from '../actor.ts';
-import type { Runner, Services } from '../app.ts';
+import type { Ctx, Runner, Services } from '../app.ts';
 import { many, one, type Tx } from '../db.ts';
 import { fail, forbidden, notFound } from '../errors.ts';
 import * as engine from '../services/approvals.ts';
@@ -566,11 +566,11 @@ export async function financeRoutes(app: FastifyInstance, run: Runner, _svc: Ser
   }));
 
   // A voucher is decided by the approval rules for spending, by amount and place.
-  app.post('/api/finance/vouchers', async req => run.auth(req, async ({ tx, actor, audit }) => {
-    if (!canPrepare(actor)) forbidden();
-    const b = z.object({ vendorId: uuid.nullable().optional(), payee: z.string().trim().max(120).optional(), description: text(1000), amount: money,
-      tds: rupeesToPaise, accountId: uuid, nodeId: uuid, workOrderId: uuid.nullable().optional(), invoiceNo: optText(60), invoiceDate: date.nullable().optional(),
-      fileId: uuid.nullable().optional() }).parse(req.body);
+  // One voucher, checked and sent through the approval rules for spending.
+  const VOUCHER_INPUT = z.object({ vendorId: uuid.nullable().optional(), payee: z.string().trim().max(120).optional(), description: text(1000), amount: money,
+    tds: rupeesToPaise, accountId: uuid, nodeId: uuid, workOrderId: uuid.nullable().optional(), invoiceNo: optText(60), invoiceDate: date.nullable().optional(),
+    fileId: uuid.nullable().optional() });
+  async function createVoucher(tx: Tx, actor: Actor, audit: Ctx['audit'], b: z.infer<typeof VOUCHER_INPUT>) {
     const acc = await account(tx, b.accountId);
     if (!['expense', 'asset', 'liability'].includes(acc.type) || acc.cash_kind || acc.system_key === 'receivables')
       fail(400, 'Choose what the payment is for: an expense account, a deposit or an advance.', 'invalid');
@@ -584,6 +584,8 @@ export async function financeRoutes(app: FastifyInstance, run: Runner, _svc: Ser
     if (b.fileId && !await one(tx, `select 1 from app.files where id = $1 and purpose = 'invoice'`, [b.fileId])) fail(400, 'Upload the invoice again.', 'invalid');
     if (vendor && b.invoiceNo && await one(tx, `select ref from app.vouchers where vendor_id = $1 and lower(invoice_no) = lower($2) and status <> 'cancelled'`, [vendor.id, b.invoiceNo]))
       fail(409, `Invoice ${b.invoiceNo} from ${vendor.name} is already on a voucher.`, 'duplicate');
+    if (!vendor && b.invoiceNo && await one(tx, `select ref from app.vouchers where vendor_id is null and lower(payee) = lower($1) and lower(invoice_no) = lower($2) and status <> 'cancelled'`, [payee, b.invoiceNo]))
+      fail(409, `Invoice ${b.invoiceNo} from ${payee} is already on a voucher.`, 'duplicate');
     const ref = (await one(tx, `select app.next_ref('voucher', 'PV') as ref`))!.ref;
     const v = await one(tx, `insert into app.vouchers (ref, vendor_id, payee, description, amount_paise, tds_paise, account_id, node_id, work_order_id, invoice_no, invoice_date,
         file_id, prepared_by) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id`,
@@ -594,6 +596,54 @@ export async function financeRoutes(app: FastifyInstance, run: Runner, _svc: Ser
     await tx.query(`update app.vouchers set approval_request_id = $2 where id = $1`, [v!.id, res!.id]);
     await audit('finance.voucher', 'voucher', v!.id, `${ref}: ${rupee(b.amount)} to ${payee}, sent for approval as ${res!.ref}`);
     return { id: v!.id, ref, approvalId: res!.id, approvalRef: res!.ref };
+  }
+
+  app.post('/api/finance/vouchers', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    if (!canPrepare(actor)) forbidden();
+    return createVoucher(tx, actor, audit, VOUCHER_INPUT.parse(req.body));
+  }));
+
+  // Several payments from a spreadsheet, as JAOA's voucher import did: every row is checked first,
+  // the batch is saved only if all rows pass, and each voucher goes through approval on its own.
+  app.post('/api/finance/vouchers/import', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    if (!canPrepare(actor)) forbidden();
+    const b = z.object({ preview: z.boolean().default(false), rows: z.array(z.object({ payee: z.string().trim().min(2).max(120), description: z.string().trim().min(3).max(1000),
+      amount: z.union([z.string(), z.number()]), tds: z.union([z.string(), z.number()]).optional(), account: z.string().trim().min(1).max(20),
+      place: z.string().trim().max(120).optional(), invoiceNo: z.string().trim().max(60).optional(), invoiceDate: z.string().trim().max(10).optional() })).min(1).max(50) }).parse(req.body);
+    const root = (await one(tx, `select id from app.property_nodes where parent_id is null`))!.id;
+    const rows: { line: number; input: z.infer<typeof VOUCHER_INPUT>; payee: string; account: string; amount: number; error?: string }[] = [];
+    const seen = new Set<string>();
+    for (const [i, r] of b.rows.entries()) {
+      const line = i + 2; // the header is line 1
+      try {
+        const acc = await one(tx, `select id, code, name from app.ledger_accounts where code = $1 or lower(name) = lower($1)`, [r.account]);
+        if (!acc) throw new Error(`no account "${r.account}"`);
+        const place = r.place ? await one(tx, `select id from app.property_nodes where lower(name) = lower($1) and archived_at is null`, [r.place]) : { id: root };
+        if (!place) throw new Error(`no place called "${r.place}"`);
+        const vendor = await one(tx, `select id from app.vendors where lower(btrim(name)) = lower(btrim($1))`, [r.payee]);
+        const date = r.invoiceDate ? (/^\d{4}-\d{2}-\d{2}$/.test(r.invoiceDate) ? r.invoiceDate : /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.test(r.invoiceDate)
+          ? r.invoiceDate.replace(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/, (_m, d, m, y) => `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`) : null) : null;
+        if (r.invoiceDate && !date) throw new Error('write the invoice date as DD/MM/YYYY');
+        const input = VOUCHER_INPUT.parse({ vendorId: vendor?.id ?? null, payee: r.payee, description: r.description, amount: r.amount, tds: r.tds ?? 0,
+          accountId: acc.id, nodeId: place.id, invoiceNo: r.invoiceNo || null, invoiceDate: date });
+        const key = `${r.payee.toLowerCase()}|${(r.invoiceNo ?? '').toLowerCase()}`;
+        if (r.invoiceNo && seen.has(key)) throw new Error(`invoice ${r.invoiceNo} appears twice in this file`);
+        seen.add(key);
+        rows.push({ line, input, payee: r.payee, account: `${acc.code} ${acc.name}`, amount: input.amount });
+      } catch (e) {
+        const msg = (e as any)?.issues?.[0] ? `${(e as any).issues[0].path.join('.')}: ${(e as any).issues[0].message}` : (e as Error).message;
+        rows.push({ line, input: null as any, payee: r.payee, account: r.account, amount: 0, error: msg });
+      }
+    }
+    const errors = rows.filter(r => r.error);
+    if (b.preview || errors.length) return { saved: false, rows: rows.map(({ input: _i, ...r }) => r), errors: errors.length };
+    const made = [];
+    for (const r of rows) {
+      try { made.push(await createVoucher(tx, actor, audit, r.input)); }
+      catch (e) { fail(409, `Line ${r.line} (${r.payee}): ${(e as Error).message} Nothing was saved.`, 'import_failed'); }
+    }
+    await audit('finance.voucher_import', 'voucher', null, `${made.length} vouchers imported and sent for approval`);
+    return { saved: true, vouchers: made };
   }));
 
   app.post('/api/finance/vouchers/:id/pay', async req => run.auth(req, async ({ tx, actor, audit }) => {

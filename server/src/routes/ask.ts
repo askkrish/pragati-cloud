@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { clearTenantCache, type Runner, type Services } from '../app.ts';
 import { config } from '../config.ts';
 import { many, one } from '../db.ts';
+import { getAs } from '../services/internal.ts';
 import { fail } from '../errors.ts';
 import { z } from './z.ts';
 
@@ -62,6 +63,12 @@ export const TOOLS: Tool[] = [
     path: i => `/api/finance/vouchers${qs({ state: i.state ?? 'open' })}` },
   { name: 'weekly_pack', description: "The committee's weekly pack for the 7 days ending on a date: checks, work, renewals, approvals, cash, payments, notices.",
     input_schema: obj({ end: DAY }), path: i => `/api/packs/weekly${qs({ end: i.end })}` },
+  { name: 'draft_service_request', description: "Prepare a service request for the asker's own home when they describe a problem to fix (a leak, no power, a broken fitting) or work that needs the committee's permission. This does NOT send anything: the person sees the draft as a form, can change it, and sends it themselves. Use it only when they ask for help raising a request.",
+    input_schema: obj({ title: str('short description of the problem, 3 to 120 characters'), details: str('what, where, since when, best time to visit'),
+      category: str('kind of work', { enum: ['security', 'housekeeping', 'garden', 'electrical', 'plumbing', 'lifts', 'water', 'fire_safety', 'pool', 'waste', 'general'] }),
+      home: str("the home's label, if they have more than one"), urgent: { type: 'boolean' },
+      needs_permit: str('only for work needing permission', { enum: ['terrace_work', 'renovation', 'moving', 'other'] }) }, ['title', 'category']),
+    path: () => '' },
   { name: 'owners_update', description: "The owners' monthly update (counts only) for a month given as YYYY-MM.", input_schema: obj({ month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' } }),
     path: i => `/api/packs/owners${qs({ month: i.month })}` },
 ];
@@ -85,6 +92,7 @@ How to work:
 - Use the lookups to find the answer; never guess figures, names, dates or statuses. If the lookups do not have it, say so plainly and suggest who in the association could help.
 - The lookups return only what this person is allowed to see. If one is refused, say that their role does not include it; do not hint at what it might contain.
 - You can only read. If asked to change, approve, pay or publish something, say where in the app they can do it (for example Work, Money, Approvals, Notices, Records library).
+- The one exception: when someone describes a problem at their home and wants it fixed, prepare a draft with draft_service_request. They check and send it themselves.
 - Amounts in the records are in paise (1 rupee = 100 paise) wherever a field ends in _paise or the value is a whole number of paise; show rupees in the Indian style, like ₹1,25,000. Dates as 14 Dec 2026.
 - Mention refs (WO-0012, AP-0005, PV-0003, NT-0001) so people can find the item in the app.
 - Keep answers short and plain: a sentence or two, or a short list with "- " at the start of each line. No headings, no tables, no bold.
@@ -113,16 +121,44 @@ export async function askRoutes(app: FastifyInstance, run: Runner, _svc: Service
   async function lookup(req: FastifyRequest, tool: Tool, input: any): Promise<string> {
     let path: string;
     try { path = tool.path(input ?? {}); } catch (e) { return JSON.stringify({ error: (e as Error).message }); }
-    const pass = ['host', 'cookie', 'x-forwarded-host', 'x-azure-fdid', 'x-azure-clientip', 'x-forwarded-for', 'user-agent'];
-    const headers: Record<string, string> = { 'x-pragati': '1' };
-    for (const h of pass) if (req.headers[h]) headers[h] = String(req.headers[h]);
-    const res = await app.inject({ method: 'GET', url: path, headers });
-    if (res.statusCode === 403) return JSON.stringify({ error: 'Not available to this person: their role does not include it.' });
-    if (res.statusCode === 404) return JSON.stringify({ error: 'Not found.' });
-    if (res.statusCode >= 400) return JSON.stringify({ error: (res.json() as any)?.error ?? `Lookup failed (${res.statusCode}).` });
-    const text = JSON.stringify(scrub(res.json()));
+    const res = await getAs(app, req, path);
+    if (res.status === 403) return JSON.stringify({ error: 'Not available to this person: their role does not include it.' });
+    if (res.status === 404) return JSON.stringify({ error: 'Not found.' });
+    if (res.status >= 400) return JSON.stringify({ error: res.body?.error ?? `Lookup failed (${res.status}).` });
+    const text = JSON.stringify(scrub(res.body));
     return text.length > MAX_RESULT ? `${text.slice(0, MAX_RESULT)}… [cut short: ask a narrower question or use a filter]` : text;
   }
+
+  // A drafted request is checked against the asker's own homes; nothing is saved until they send it.
+  async function draftFor(req: FastifyRequest, input: any) {
+    const me = await getAs(app, req, '/api/me');
+    const homes: any[] = (me.body?.homes ?? []).filter((h: any, i: number, a: any[]) => a.findIndex(x => x.id === h.id) === i);
+    if (!homes.length) return { error: 'The person has no home on record, so they cannot raise a request for one. Suggest contacting the association office.' };
+    const label = String(input.home ?? '').trim().toLowerCase();
+    const home = homes.find(h => h.label.toLowerCase() === label) ?? (homes.length === 1 ? homes[0] : null);
+    if (!home) return { error: `Ask which home: ${homes.map(h => h.label).join(', ')}.` };
+    const cats = ['security', 'housekeeping', 'garden', 'electrical', 'plumbing', 'lifts', 'water', 'fire_safety', 'pool', 'waste', 'general'];
+    return { unitId: home.id, unit: home.label, title: String(input.title ?? '').slice(0, 120), details: String(input.details ?? '').slice(0, 2000),
+      category: cats.includes(input.category) ? input.category : 'general', urgent: input.urgent === true,
+      permitKind: ['terrace_work', 'renovation', 'moving', 'other'].includes(input.needs_permit) ? input.needs_permit : null };
+  }
+
+  app.post('/api/ask/:id/rating', async req => run.auth(req, async ({ tx, actor }) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const b = z.object({ helpful: z.boolean(), note: z.string().trim().max(1000).optional() }).parse(req.body);
+    const r = await tx.query(`update app.ask_questions set rating = $3, rating_note = $4 where id = $1 and person_id = $2`, [id, actor.personId, b.helpful ? 1 : -1, b.note || null]);
+    if (!r.rowCount) fail(404, 'That answer was not found.', 'not_found');
+    return { ok: true };
+  }));
+
+  // How the assistant is doing, for those who manage the community's settings.
+  app.get('/api/ask/usage', async req => run.auth(req, async ({ tx, actor }) => {
+    actor.require('settings.manage', null);
+    return one(tx, `select count(*)::int as questions, count(distinct person_id)::int as people,
+        count(*) filter (where rating = 1)::int as helpful, count(*) filter (where rating = -1)::int as not_helpful,
+        count(*) filter (where error is not null)::int as failed, coalesce(sum(input_tokens), 0)::bigint as input_tokens, coalesce(sum(output_tokens), 0)::bigint as output_tokens
+      from app.ask_questions where created_at > date_trunc('month', now())`);
+  }));
 
   const enabled = (req: FastifyRequest) => !!config.ask.apiKey && !!req.tenant?.assistant_enabled;
 
@@ -175,6 +211,7 @@ export async function askRoutes(app: FastifyInstance, run: Runner, _svc: Service
     const system = systemPrompt({ platform: req.tenant!.platform_name, assistant: req.tenant!.assistant_name, name: who.name, today: who.today, language: b.language });
     const used: string[] = [];
     let inTok = 0, outTok = 0, answer = '', error: string | null = null;
+    let draft: any = null;
     try {
       for (let round = 0; round < 7; round++) {
         const last = round === 6;
@@ -190,6 +227,12 @@ export async function askRoutes(app: FastifyInstance, run: Runner, _svc: Service
         const results = await Promise.all(calls.map(async (c: any) => {
           const tool = TOOLS.find(t => t.name === c.name);
           used.push(c.name);
+          if (c.name === 'draft_service_request') {
+            const d = await draftFor(req, c.input ?? {});
+            if ('error' in d) return { type: 'tool_result', tool_use_id: c.id, content: JSON.stringify(d) };
+            draft = d;
+            return { type: 'tool_result', tool_use_id: c.id, content: JSON.stringify({ shown: true, note: 'The draft is shown to the person as a form to check and send. Tell them briefly; do not repeat it.' }) };
+          }
           const content = tool ? await lookup(req, tool, c.input) : JSON.stringify({ error: 'No such lookup.' });
           return { type: 'tool_result', tool_use_id: c.id, content };
         }));
@@ -201,9 +244,9 @@ export async function askRoutes(app: FastifyInstance, run: Runner, _svc: Service
       req.log.warn({ err: error }, 'assistant failed');
     }
 
-    await run.auth(req, ({ tx }) => tx.query(`insert into app.ask_questions (person_id, question, answer, language, lookups, model, input_tokens, output_tokens, error)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [who.personId, b.question, error ? null : answer, b.language, used, config.ask.model, inTok, outTok, error]));
+    const saved = await run.auth(req, async ({ tx }) => (await one(tx, `insert into app.ask_questions (person_id, question, answer, language, lookups, model, input_tokens, output_tokens, error)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id`, [who.personId, b.question, error ? null : answer, b.language, used, config.ask.model, inTok, outTok, error]))!);
     if (error) fail(502, 'The assistant could not answer just now. Please try again in a minute.', 'assistant_failed');
-    return { answer, lookups: [...new Set(used)] };
+    return { id: saved.id, answer, lookups: [...new Set(used)], draft };
   });
 }

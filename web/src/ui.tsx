@@ -117,6 +117,7 @@ export const Icon = {
   people: svg(<><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><circle cx="17" cy="9" r="2.4" /><path d="M16 14.2c2.4.1 4 1.6 4.5 4.3" /></>),
   more: svg(<><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></>),
   money: svg(<><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.6" /><path d="M6.5 9.5v5M17.5 9.5v5" /></>),
+  search: svg(<><circle cx="10.5" cy="10.5" r="6" /><path d="m15 15 5.5 5.5" /></>),
   ask: svg(<><path d="M4 5.5h16v10.5H10l-4.5 3.5V16H4z" /><path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.6" /><path d="M12 14.6v.1" /></>),
   work: svg(<><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V2.8h6V4" /><path d="m8.5 12 2.2 2.2L15.5 9.5" /><path d="M8.5 17.5h7" /></>),
 };

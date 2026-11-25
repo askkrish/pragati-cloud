@@ -9,7 +9,7 @@ import { ErrorNote, Link, Loading, navigate, PageHead, useAction, useApi } from 
 // Switching off is rare and affects everyone, so it asks first.
 const confirmOff = () => window.confirm('Switch off the assistant for everyone in the community?');
 
-type Turn = { q: string; a: string; lookups?: string[] };
+type Turn = { q: string; a: string; lookups?: string[]; id?: string; draft?: any };
 
 // What to suggest depends on what the person can see.
 function suggestions(me: any): string[] {
@@ -27,12 +27,14 @@ function suggestions(me: any): string[] {
 export function Answer({ text }: { text: string }) {
   const blocks: React.ReactNode[] = [];
   let list: string[] = [];
-  const flush = () => { if (list.length) blocks.push(<ul key={blocks.length}>{list.map((l, i) => <li key={i}>{l}</li>)}</ul>); list = []; };
+  const linked = (line: string) => line.split(/\b([A-Z]{2}-\d{4,})\b/).map((part, i) => i % 2 ? <Link key={i} to={`/go/${part}`}>{part}</Link> : part);
+  const flush = () => { if (list.length) blocks.push(<ul key={blocks.length}>{list.map((l, i) => <li key={i}>{linked(l)}</li>)}</ul>); list = []; };
+  // References such as WO-0012 open the record, through the same access checks as everywhere else.
   for (const raw of text.replace(/\*\*/g, '').split('\n')) {
     const line = raw.trim();
     if (/^[-•*] /.test(line)) { list.push(line.slice(2)); continue; }
     flush();
-    if (line) blocks.push(<p key={blocks.length}>{line.replace(/^#+\s*/, '')}</p>);
+    if (line) blocks.push(<p key={blocks.length}>{linked(line.replace(/^#+\s*/, ''))}</p>);
   }
   flush();
   return <div className="answer">{blocks}</div>;
@@ -50,7 +52,7 @@ export function Ask() {
 
   const ask = (question: string) => run(async () => {
     const r = await api.post('/api/ask', { question, language: lang, earlier: turns.slice(-4).map(({ q, a }) => ({ q, a })) });
-    setTurns(ts => [...ts, { q: question, a: r.answer, lookups: r.lookups }]);
+    setTurns(ts => [...ts, { q: question, a: r.answer, lookups: r.lookups, id: r.id, draft: r.draft }]);
     setQ('');
     status.reload();
   });
@@ -77,6 +79,8 @@ export function Ask() {
       {turns.map((tn, i) => <div key={i} className="turn">
         <p className="asked">{tn.q}</p>
         <Answer text={tn.a} />
+        {tn.draft && <DraftRequest draft={tn.draft} />}
+        {tn.id && <AnswerTools id={tn.id} text={tn.a} />}
       </div>)}
       {busy && <div className="turn"><p className="quiet thinking">Looking through the records…</p></div>}
     </div>
@@ -90,6 +94,37 @@ export function Ask() {
       {s.canSwitch && <> <button type="button" className="link" onClick={() => { if (confirmOff()) api.patch('/api/ask/settings', { enabled: false }).then(() => location.assign('/')); }}>
         Switch off for the community</button></>}</p>
   </>;
+}
+
+function AnswerTools({ id, text }: { id: string; text: string }) {
+  const [rated, setRated] = useState<boolean | null>(null);
+  const [copied, setCopied] = useState(false);
+  const rate = (helpful: boolean) => api.post(`/api/ask/${id}/rating`, { helpful }).then(() => setRated(helpful)).catch(() => {});
+  return <div className="answer-tools">
+    <button type="button" className="link" onClick={() => navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}>{copied ? 'Copied' : 'Copy'}</button>
+    {rated === null ? <>
+      <button type="button" className="link" onClick={() => rate(true)} aria-label="This answer helped">Helpful</button>
+      <button type="button" className="link" onClick={() => rate(false)} aria-label="This answer did not help">Not helpful</button>
+    </> : <span className="quiet small">Thanks for the rating.</span>}
+  </div>;
+}
+
+// A request the assistant drafted: the person checks it, changes anything, and sends it themselves.
+function DraftRequest({ draft }: { draft: any }) {
+  const [f, setF] = useState({ title: draft.title, details: draft.details, urgent: draft.urgent });
+  const [sent, setSent] = useState<any>(null);
+  const { busy, error, run } = useAction();
+  if (sent) return <p className="note ok">Request {sent.ref} sent. <Link to={`/work/orders/${sent.id}`}>Follow it here</Link>.</p>;
+  return <form className="form panel pad draft" onSubmit={e => { e.preventDefault(); run(async () => {
+    setSent(await api.post('/api/work', { kind: 'request', unitId: draft.unitId, title: f.title, details: f.details, category: draft.category,
+      priority: f.urgent ? 'urgent' : 'normal', permitKind: draft.permitKind })); }); }}>
+    <p className="quiet small">Draft request for {draft.unit}{draft.permitKind ? ', needing the committee\'s permission' : ''}. Check it and send it, or change anything first.</p>
+    <label className="field">What is the problem<input required minLength={3} value={f.title} onChange={e => setF({ ...f, title: e.target.value })} /></label>
+    <label className="field">Details<textarea value={f.details} onChange={e => setF({ ...f, details: e.target.value })} /></label>
+    <label className="check"><input type="checkbox" checked={f.urgent} onChange={e => setF({ ...f, urgent: e.target.checked })} />Urgent</label>
+    <ErrorNote error={error} />
+    <div className="actions"><button className="primary" disabled={busy}>Send request</button></div>
+  </form>;
 }
 
 function AssistantOff({ status, reload }: { status: any; reload: () => void }) {

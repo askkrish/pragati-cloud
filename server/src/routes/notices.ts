@@ -7,6 +7,7 @@ import { fail, forbidden, notFound } from '../errors.ts';
 import { balances, duesByUnit, financeToday } from '../services/ledger.ts';
 import { IN_SCOPE, isStaff, nodeRef, routineDays, seeScopes, visibleRoutines } from '../services/operations.ts';
 import { addDays, localNow } from '../services/schedule.ts';
+import { getAs } from '../services/internal.ts';
 import { date, idParam, text, uuid, z } from './z.ts';
 
 type Who = { homes: string[][]; owner: boolean; committee: boolean; staff: boolean; finance: boolean; actor: Actor };
@@ -163,9 +164,11 @@ export async function noticeRoutes(app: FastifyInstance, run: Runner, _svc: Serv
     const w = await who(tx, actor);
     if (!w.committee && !w.staff && !w.finance) forbidden();
     const today = await financeToday(tx);
-    const end = z.object({ end: date.optional() }).parse(req.query).end ?? today;
-    const start = addDays(end, -6);
-    const out: Record<string, unknown> = { start, end, community: (await one(tx, `select platform_name, legal_name from app.tenants`)) };
+    const q = z.object({ end: date.optional(), days: z.coerce.number().int().min(1).max(31).default(7) }).parse(req.query);
+    const end = q.end ?? today;
+    // One day is the end-of-day summary; seven the weekly pack.
+    const start = addDays(end, -(q.days - 1));
+    const out: Record<string, unknown> = { start, end, days: q.days, community: (await one(tx, `select platform_name, legal_name, escalation_days from app.tenants`)) };
     if (isStaff(actor)) {
       const tz = (await one(tx, `select timezone from app.tenants`))!.timezone;
       const now = localNow(tz);
@@ -192,9 +195,21 @@ export async function noticeRoutes(app: FastifyInstance, run: Runner, _svc: Serv
         where ${IN_SCOPE(1)} and w.status in ('new', 'open', 'in_progress', 'on_hold') order by w.created_at limit 8`, [scopes]);
       out.renewals = await many(tx, `select c.ref, c.title, c.kind, c.ends_on, c.provider from app.asset_contracts c join app.property_nodes n on n.tenant_id = c.tenant_id and n.id = c.node_id
         where c.renewed_by is null and c.archived_at is null and c.ends_on <= $2::date + 30 and ${IN_SCOPE(1)} order by c.ends_on`, [scopes, end]);
+      out.services = await many(tx, `select a.ref, a.name, s.next_due_on, s.outcome from app.assets a join app.property_nodes n on n.tenant_id = a.tenant_id and n.id = a.node_id
+        join lateral (select next_due_on, outcome from app.asset_services x where x.asset_id = a.id order by x.serviced_on desc, x.created_at desc limit 1) s on true
+        where a.archived_at is null and ((s.next_due_on is not null and s.next_due_on <= $2::date + 30) or s.outcome <> 'passed') and ${IN_SCOPE(1)} order by s.next_due_on nulls first`, [scopes, end]);
+      out.incidents = await many(tx, `select w.ref, w.title, w.priority, w.status, w.created_at from app.work_orders w join app.property_nodes n on n.tenant_id = w.tenant_id and n.id = w.node_id
+        where w.kind = 'incident' and w.created_at::date between $2 and $3 and ${IN_SCOPE(1)} order by w.created_at`, [scopes, start, end]);
+      out.milestones = await many(tx, `select w.ref, w.title as work, m.title, m.due_on from app.milestones m join app.work_orders w on w.tenant_id = m.tenant_id and w.id = m.work_order_id
+        join app.property_nodes n on n.tenant_id = w.tenant_id and n.id = w.node_id
+        where m.done_on is null and m.due_on <= $2::date + 7 and w.status not in ('closed', 'cancelled') and ${IN_SCOPE(1)} order by m.due_on limit 15`, [scopes, end]);
+      out.handovers = await many(tx, `select h.ref, w.ref as work_ref, w.title, p.full_name as recipient, h.created_at from app.handovers h
+        join app.work_orders w on w.tenant_id = h.tenant_id and w.id = h.work_order_id join app.people p on p.tenant_id = h.tenant_id and p.id = h.recipient_id
+        where h.status = 'submitted' order by h.created_at`);
     }
     if (actor.canAnywhere('approvals.view')) {
-      out.approvals = await many(tx, `select r.ref, r.title, r.amount_paise, r.subject_type, (current_date - r.created_at::date) as age from app.approval_requests r
+      out.approvals = await many(tx, `select r.ref, r.title, r.amount_paise, r.subject_type, (current_date - r.created_at::date) as age,
+          (now() - r.created_at > make_interval(days => (select escalation_days from app.tenants))) as escalated from app.approval_requests r
         where r.status = 'pending' order by r.created_at limit 15`);
       out.decided = await many(tx, `select r.ref, r.title, r.status, r.amount_paise from app.approval_requests r where r.decided_at::date between $1 and $2 order by r.decided_at`, [start, end]);
     }
@@ -211,6 +226,100 @@ export async function noticeRoutes(app: FastifyInstance, run: Runner, _svc: Serv
     out.notices = await many(tx, `select ref, title, audience, publish_at from app.notices where withdrawn_at is null and publish_at::date between $1 and $2 order by publish_at`, [start, end]);
     return out;
   }));
+
+  // Notice templates with fill-in fields such as {{date}}, carried over from JAOA's report templates.
+  const STARTERS = [
+    { id: 'starter-water', title: 'Water supply off on {{day}}', category: 'maintenance', audience: 'everyone',
+      body: 'Water supply will be off on {{day}} from {{from_time}} to {{to_time}} for {{reason}}.\n\nPlease store water the night before. For help, call the facility office.' },
+    { id: 'starter-power', title: 'Power shutdown on {{day}}', category: 'maintenance', audience: 'everyone',
+      body: 'Power will be off in {{place}} on {{day}} from {{from_time}} to {{to_time}} for {{reason}}. Lifts will not run during this time; the generator will cover common lighting.' },
+    { id: 'starter-lift', title: '{{lift}} out of service', category: 'maintenance', audience: 'everyone',
+      body: '{{lift}} will be out of service from {{from_day}} to {{to_day}} for {{reason}}. Other lifts will run as usual. Residents needing help with heavy items may ask the security desk.' },
+    { id: 'starter-pest', title: 'Pest control on {{day}}', category: 'general', audience: 'everyone',
+      body: 'Pest control will be done in {{place}} on {{day}} from {{from_time}}. Please keep food covered and children and pets away from treated areas for two hours.' },
+    { id: 'starter-dues', title: 'Maintenance for {{month}} due by {{due_day}}', category: 'finance', audience: 'owners',
+      body: 'Maintenance bills for {{month}} are in the app under Dues. Please pay by {{due_day}}. Pay by UPI from the app and tap "I have paid" with the UTR so the treasurer can match it.' },
+    { id: 'starter-agm', title: 'Annual general meeting on {{day}}', category: 'meeting', audience: 'owners',
+      body: 'The annual general meeting will be held at {{venue}} on {{day}} at {{time}}.\n\nAgenda:\n{{agenda}}\n\nOwners who cannot attend may appoint a proxy in writing by {{proxy_by}}.' },
+  ];
+  app.get('/api/notice-templates', async req => run.auth(req, async ({ tx, actor }) => {
+    if (!actor.canAnywhere('notices.publish')) forbidden();
+    const own = await many(tx, `select id, title, body, category, audience from app.notice_templates where archived_at is null order by title`);
+    return [...own.map(t => ({ ...t, own: true })), ...STARTERS.map(t => ({ ...t, own: false }))];
+  }));
+  app.post('/api/notice-templates', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    if (!actor.canAnywhere('notices.publish')) forbidden();
+    const b = z.object({ title: text(160), body: z.string().trim().min(3).max(8000),
+      category: z.enum(['general', 'maintenance', 'meeting', 'finance', 'security', 'event', 'emergency']).default('general'),
+      audience: z.enum(['everyone', 'owners', 'committee', 'staff']).default('everyone') }).parse(req.body);
+    const fields = [...new Set([...`${b.title} ${b.body}`.matchAll(/\{\{(\w{1,30})\}\}/g)].map(m => m[1]))];
+    if (fields.length > 18) fail(400, 'Use at most 18 fill-in fields.', 'invalid');
+    if (/\{\{|\}\}/.test(`${b.title} ${b.body}`.replace(/\{\{\w{1,30}\}\}/g, ''))) fail(400, 'Write fill-in fields as {{name}}, using letters, numbers and underscores.', 'invalid');
+    const t = await one(tx, `insert into app.notice_templates (title, body, category, audience, created_by) values ($1, $2, $3, $4, $5) returning id`,
+      [b.title, b.body, b.category, b.audience, actor.personId]);
+    await audit('notice_template.created', 'notice_template', t!.id, `Notice template "${b.title}" saved`);
+    return { id: t!.id, fields };
+  }));
+  app.post('/api/notice-templates/:id/archive', async req => run.auth(req, async ({ tx, actor }) => {
+    if (!actor.canAnywhere('notices.publish')) forbidden();
+    const r = await tx.query(`update app.notice_templates set archived_at = now() where id = $1 and archived_at is null`, [idParam.parse(req.params).id]);
+    if (!r.rowCount) notFound('That template');
+    return { ok: true };
+  }));
+
+  // The annual pack for the AGM: the year's work, decisions and accounts, for the committee to review
+  // before it is published. Each part comes only to those allowed to see it.
+  app.get('/api/packs/annual', async req => {
+    const base = await run.auth(req, async ({ tx, actor }) => {
+      const w = await who(tx, actor);
+      if (!w.committee && !w.finance) forbidden();
+      const today = await financeToday(tx);
+      const s = await one(tx, `select fy_start_month from app.finance_settings`);
+      const startMonth = Number(s?.fy_start_month ?? 4);
+      const cur = Number(today.slice(5, 7)) >= startMonth ? Number(today.slice(0, 4)) : Number(today.slice(0, 4)) - 1;
+      const fy = z.object({ fy: z.coerce.number().int().min(2000).max(cur).optional() }).parse(req.query).fy ?? cur - 1;
+      const start = `${fy}-${String(startMonth).padStart(2, '0')}-01`;
+      const endFull = addDays(`${fy + 1}-${String(startMonth).padStart(2, '0')}-01`, -1);
+      const end = endFull < today ? endFull : today;
+      const out: Record<string, any> = { fy, start, end, complete: endFull < today, label: `${fy}–${String(fy + 1).slice(2)}`,
+        community: await one(tx, `select platform_name, legal_name, registration_no from app.tenants`) };
+      if (isStaff(actor) || w.committee) {
+        const scopes = seeScopes(actor);
+        out.work = await many(tx, `select w.kind, count(*) filter (where w.created_at::date between $2 and $3)::int as opened,
+            count(*) filter (where w.status in ('done', 'closed') and coalesce(w.completed_at, w.closed_at)::date between $2 and $3)::int as completed
+          from app.work_orders w join app.property_nodes n on n.tenant_id = w.tenant_id and n.id = w.node_id
+          where ${IN_SCOPE(1)} group by w.kind order by w.kind`, [scopes, start, end]);
+        out.requestDays = (await one(tx, `select round(avg(extract(epoch from (coalesce(w.completed_at, w.closed_at) - w.created_at)) / 86400)::numeric, 1) as days
+          from app.work_orders w where w.kind = 'request' and w.status in ('done', 'closed') and coalesce(w.completed_at, w.closed_at)::date between $1 and $2`, [start, end]))?.days ?? null;
+        out.projects = await many(tx, `select w.ref, w.title, w.status, c.ref as contract_ref, v.name as vendor,
+            c.amount_paise + coalesce((select sum(ch.delta_paise) from app.contract_changes ch join app.approval_requests r on r.tenant_id = ch.tenant_id and r.id = ch.approval_request_id
+              where ch.contract_id = c.id and r.status = 'approved'), 0) as committed_paise,
+            (select coalesce(sum(x.amount_paise), 0) from app.vouchers x where x.work_order_id = w.id and x.status = 'paid') as paid_paise
+          from app.work_orders w left join app.contracts c on c.tenant_id = w.tenant_id and c.work_order_id = w.id
+          left join app.vendors v on v.tenant_id = c.tenant_id and v.id = c.vendor_id
+          where w.kind = 'project' and (w.created_at::date between $1 and $2 or coalesce(w.completed_at, w.closed_at)::date between $1 and $2
+            or w.status in ('open', 'in_progress', 'on_hold')) order by w.created_at`, [start, end]);
+        out.services = (await one(tx, `select count(*)::int as n, count(*) filter (where outcome <> 'passed')::int as issues from app.asset_services
+          where serviced_on between $1 and $2`, [start, end]));
+      }
+      if (actor.canAnywhere('approvals.view')) {
+        out.approvals = await many(tx, `select r.status, count(*)::int as n, coalesce(sum(r.amount_paise), 0)::bigint as amount from app.approval_requests r
+          where r.decided_at::date between $1 and $2 group by r.status order by r.status`, [start, end]);
+      }
+      out.notices = (await one(tx, `select count(*)::int as n from app.notices where withdrawn_at is null and publish_at::date between $1 and $2`, [start, end]))!.n;
+      out.documents = (await one(tx, `select count(*)::int as n from app.documents where created_at::date between $1 and $2`, [start, end]))!.n;
+      out.finance = w.finance;
+      return out;
+    });
+    if (base.finance) {
+      const get = async (p: string) => { const r = await getAs(app, req, p); return r.status === 200 ? r.body : null; };
+      const [income, balance, budget, collection] = await Promise.all([
+        get(`/api/finance/reports/income?from=${base.start}&to=${base.end}`), get(`/api/finance/reports/balance?asOf=${base.end}`),
+        get(`/api/finance/reports/budget?fy=${base.fy}`), get(`/api/finance/reports/collection?from=${base.start}&to=${base.end}`)]);
+      Object.assign(base, { income, balance, budget, collection });
+    }
+    return base;
+  });
 
   // The owners' monthly update: how the community is being looked after, in counts only.
   app.get('/api/packs/owners', async req => run.auth(req, async ({ tx }) => {

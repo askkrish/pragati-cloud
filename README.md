@@ -79,6 +79,19 @@ Full books for each community, as agreed in the commercial plan, with export to 
 | Permits | Owners mark requests that need the committee's permission (terrace drilling or cabling, renovation, moving). Work cannot start without a permit in force; the committee grants it with conditions and an end date, declines it, or revokes it, which stops work in progress. |
 | Ageing decisions | Approvals waiting longer than the community's setting (7 days unless changed) are flagged. |
 
+## Phase 2, module 7: getting around, reports and the rest of JAOA
+
+| Area | What works |
+| --- | --- |
+| Search | One box for requests and work, approvals, notices, records, homes, people, vendors, assets, routines and vouchers. Each source is read through the API as the person searching, so it shows only what their screens would. A reference such as WO-0012 opens the record. |
+| QR labels | Printable labels for each place with checks; scanning one opens that place's checks for the day. |
+| Installable and offline | The app installs on phones in the community's name and colour. Screens keep working without signal, and checks recorded offline wait on the phone (without photos) until they can be sent. Community data is never stored by the service worker. |
+| Packs | An end-of-day summary, and an annual pack for the AGM: work by kind, time to fix requests, equipment services, projects with committed and paid amounts, decisions, and for those who see the books, income and expenditure, balance sheet, budget and collection. The weekly pack adds equipment due for service, incidents, project milestones and handovers waiting, and flags ageing decisions. |
+| Notice templates | Standard notices (water or power off, lift outage, pest control, dues reminder, AGM) and the community's own, with fill-in fields such as {{day}}. |
+| Voucher import | Up to 50 payments from a CSV saved from Excel or Google Sheets, checked line by line; saved only if every line passes, each sent for approval. |
+| Ask Pragathi | References in answers open the record; copy and rate each answer; it drafts a service request for the asker's home, which they check and send themselves. Monthly usage and ratings for the committee. |
+| Help and feedback | A short guide for each kind of person and a message form to the platform team. |
+
 ## Phase 2, module 5: Ask Pragathi
 
 Questions in plain words, in English or Tamil, answered by Claude from the community's own records.

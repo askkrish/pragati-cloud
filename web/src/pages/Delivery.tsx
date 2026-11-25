@@ -113,7 +113,7 @@ function RfqForm({ workId, onDone }: { workId: string; onDone: () => void }) {
     <label className="field">Scope: the work, quantities, specifications, and what is excluded<textarea required rows={6} value={f.scope} onChange={e => setF({ ...f, scope: e.target.value })} /></label>
     <label className="field">Replies by<input type="date" required min={todayIso()} value={f.replyBy} onChange={e => setF({ ...f, replyBy: e.target.value })} /></label>
     <fieldset className="field"><legend>Vendors asked</legend>
-      <div className="checks">{(vendors.data ?? []).filter(v => v.status !== 'blocked').map(v => <label key={v.id} className="check">
+      <div className="pick-list">{(vendors.data ?? []).filter(v => v.status !== 'blocked').map(v => <label key={v.id} className="check">
         <input type="checkbox" checked={f.vendorIds.includes(v.id)} onChange={e => setF({ ...f, vendorIds: e.target.checked ? [...f.vendorIds, v.id] : f.vendorIds.filter(x => x !== v.id) })} />{v.name}</label>)}</div>
     </fieldset>
     <ErrorNote error={error} />

@@ -426,7 +426,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--brand-ink); 
 .tag.a-rejected, .tag.ho-returned, .tag.p-declined, .tag.p-revoked { background: #fbe9e7; color: var(--stop); }
 .tag.a-withdrawn, .tag.ho-superseded { background: var(--line-2); color: var(--ink-2); }
 .row.handover .meta { white-space: pre-wrap; }
-.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; }
+.pick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
 .permit { border-left: 4px solid var(--brand); }
 .tag.escalated { background: #fbe9e7; color: var(--stop); }
 .tag.sv-passed, .tag.gst-verified, .tag.gst-not_charged { background: var(--yes-wash); color: var(--yes); }
@@ -434,3 +434,25 @@ button.link { background: none; border: 0; padding: 0; color: var(--brand-ink); 
 .tag.sv-out_of_service { background: #fbe9e7; color: var(--stop); }
 .tag.gst-none { background: var(--line-2); color: var(--ink-2); }
 .gst { max-width: 760px; }
+
+/* ---------- search, QR labels, offline ---------- */
+.search-link { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: inherit; }
+.search-link svg { width: 22px; height: 22px; }
+.search-link:hover { background: rgba(255,255,255,0.12); }
+.search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; max-width: 760px; }
+.offline-note { background: var(--no-wash); color: var(--ink); border: 1px solid var(--no); border-radius: var(--radius-s); padding: 10px 14px; display: grid; gap: 4px; }
+.qr { display: inline-block; flex: none; }
+.qr svg { width: 100%; height: 100%; display: block; }
+.qr-sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 16px; }
+.qr-label { display: flex; gap: 14px; align-items: center; border: 1.5px dashed var(--line); border-radius: var(--radius-s); padding: 12px; background: white; break-inside: avoid; }
+.qr-label div { display: grid; gap: 4px; }
+.qr-label b { font: 700 1.15rem/1.2 var(--display); }
+.qr-label span { font-size: 0.85rem; color: var(--ink-2); }
+@media print {
+  .frame > .topbar, .frame > .nav, .demo-note, .offline-note { display: none !important; }
+  .frame { display: block; }
+  .qr-sheet { grid-template-columns: repeat(2, 1fr); gap: 8mm; margin: 0; }
+  .qr-label { border-color: #999; }
+}
+.answer-tools { display: flex; gap: 14px; font-size: 0.9rem; padding-left: 4px; }
+.draft { max-width: 92%; border-left: 4px solid var(--brand); }

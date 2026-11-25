@@ -34,20 +34,36 @@ export function NoticeBoard() {
   </>;
 }
 
+const FIELD = /\{\{(\w{1,30})\}\}/g;
+const fieldsOf = (text: string) => [...new Set([...text.matchAll(FIELD)].map(m => m[1]))];
+
 function NoticeForm({ onDone }: { onDone: (id: string) => void }) {
   const tree = useApi<{ nodes: TreeNode[] }>('/api/property/tree');
+  const templates = useApi<any[]>('/api/notice-templates');
   const [f, setF] = useState({ title: '', body: '', category: 'general', audience: 'everyone', scopeNodeId: '', publishAt: '', expiresOn: '', pinned: false });
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [savedTpl, setSavedTpl] = useState(false);
+  const fields = fieldsOf(`${f.title} ${f.body}`);
+  const fill = (text: string) => text.replace(FIELD, (m, k) => values[k]?.trim() ? values[k].trim() : m);
+  const useTemplate = (id: string) => { const tp = templates.data?.find(x => x.id === id); if (tp) { setF({ ...f, title: tp.title, body: tp.body, category: tp.category, audience: tp.audience }); setValues({}); } };
   const [file, setFile] = useState<File | null>(null);
   const { busy, error, run } = useAction();
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
   const places = (tree.data?.nodes ?? []).filter(n => n.in_scope && n.kind !== 'floor' && n.parent_id);
   return <form className="form" onSubmit={e => { e.preventDefault(); run(async () => {
+    const title = fill(f.title), body = fill(f.body);
+    if (fieldsOf(`${title} ${body}`).length) throw new Error('Fill in every field in double braces, such as {{day}}, before publishing.');
     const fileId = file ? (await api.upload('/api/files?purpose=notice', file)).id : null;
-    const r = await api.post('/api/notices', { ...f, scopeNodeId: f.scopeNodeId || null, publishAt: f.publishAt ? new Date(f.publishAt).toISOString() : undefined,
+    const r = await api.post('/api/notices', { ...f, title, body, scopeNodeId: f.scopeNodeId || null, publishAt: f.publishAt ? new Date(f.publishAt).toISOString() : undefined,
       expiresOn: f.expiresOn || null, fileId });
     onDone(r.id); }); }}>
+    {(templates.data?.length ?? 0) > 0 && <label className="field">Start from a template (optional)<select defaultValue="" onChange={e => useTemplate(e.target.value)}>
+      <option value="">Write it from scratch</option>{templates.data!.map(tp => <option key={tp.id} value={tp.id}>{tp.title.replace(FIELD, '…')}{tp.own ? '' : ' (standard)'}</option>)}</select></label>}
     <label className="field">Title<input required value={f.title} onChange={set('title')} placeholder="For example, Water supply off on Sunday morning" /></label>
-    <label className="field">Notice<textarea required rows={6} value={f.body} onChange={set('body')} placeholder="What is happening, when, what residents should do, whom to contact" /></label>
+    <label className="field">Notice<textarea required rows={6} value={f.body} onChange={set('body')} placeholder="What is happening, when, what residents should do, whom to contact. Use {{day}} for a field to fill in each time." /></label>
+    {fields.length > 0 && <fieldset className="field"><legend>Fill in</legend><div className="two">{fields.map(k => <label key={k} className="field">{k.replace(/_/g, ' ')}
+      <input value={values[k] ?? ''} onChange={e => setValues({ ...values, [k]: e.target.value })} /></label>)}</div></fieldset>}
+    {fields.length > 0 && <p className="quiet small">Preview: <b>{fill(f.title)}</b></p>}
     <div className="two">
       <label className="field">Kind<select value={f.category} onChange={set('category')}>{Object.entries(NCAT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       <label className="field">For<select value={f.audience} onChange={set('audience')}>{Object.entries(AUD).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
@@ -59,7 +75,10 @@ function NoticeForm({ onDone }: { onDone: (id: string) => void }) {
     </div>
     <label className="check"><input type="checkbox" checked={f.pinned} onChange={set('pinned')} />Pin to the top</label>
     <ErrorNote error={error} />
-    <div className="actions"><button className="primary" disabled={busy}>{f.publishAt ? 'Schedule notice' : 'Publish notice'}</button></div>
+    <div className="actions"><button className="primary" disabled={busy}>{f.publishAt ? 'Schedule notice' : 'Publish notice'}</button>
+      {fields.length > 0 && !savedTpl && <button type="button" disabled={busy} onClick={() => run(async () => {
+        await api.post('/api/notice-templates', { title: f.title, body: f.body, category: f.category, audience: f.audience }); setSavedTpl(true); templates.reload(); })}>Save as a template</button>}
+      {savedTpl && <span className="quiet">Saved as a template.</span>}</div>
   </form>;
 }
 
@@ -185,6 +204,9 @@ export function Packs() {
   const last = new Date(Date.parse(today.slice(0, 8) + '01T00:00:00Z') - 86_400_000).toISOString().slice(0, 7);
   const [month, setMonth] = useState(last);
   const committee = ['committees.view', 'operations.view', 'finance.view'].some(p => can(me, p));
+  const [day, setDay] = useState(today);
+  const fyNow = Number(today.slice(5, 7)) >= 4 ? Number(today.slice(0, 4)) : Number(today.slice(0, 4)) - 1;
+  const [fy, setFy] = useState(String(Number(today.slice(5, 7)) >= 10 ? fyNow : fyNow - 1));
   return <>
     <PageHead title="Report packs" />
     <p className="quiet" style={{ maxWidth: '68ch' }}>Each pack opens as a page ready to print or save as PDF, in the language you have chosen.</p>
@@ -194,6 +216,23 @@ export function Packs() {
       <div className="actions" style={{ alignItems: 'end' }}>
         <label className="field">Week ending<input type="date" max={today} value={end} onChange={e => setEnd(e.target.value)} /></label>
         <Link to={`/print/weekly?end=${end}`} className="button primary">Open the pack</Link>
+      </div>
+    </section>}
+    {committee && <section className="panel pad">
+      <h2>End-of-day summary</h2>
+      <p className="quiet">The day's checks done and missed, work opened and closed, incidents, and anything overdue.</p>
+      <div className="actions" style={{ alignItems: 'end' }}>
+        <label className="field">Day<input type="date" max={today} value={day} onChange={e => setDay(e.target.value)} /></label>
+        <Link to={`/print/weekly?end=${day}&days=1`} className="button primary">Open the summary</Link>
+      </div>
+    </section>}
+    {(can(me, 'committees.view') || can(me, 'finance.view')) && <section className="panel pad">
+      <h2>Annual pack for the AGM</h2>
+      <p className="quiet">The year's work and projects, decisions, and for those who see the books, the income and expenditure, balance sheet, budget and collection. Review it before sharing.</p>
+      <div className="actions" style={{ alignItems: 'end' }}>
+        <label className="field">Financial year<select value={fy} onChange={e => setFy(e.target.value)}>
+          {[0, 1, 2, 3].map(i => { const y = fyNow - i; return <option key={y} value={y}>{y}–{String(y + 1).slice(2)}{i === 0 ? ' (so far)' : ''}</option>; })}</select></label>
+        <Link to={`/print/annual?fy=${fy}`} className="button primary">Open the pack</Link>
       </div>
     </section>}
     <section className="panel pad">
@@ -222,12 +261,14 @@ const fmtDay = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-
 const fmtShort = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' });
 
 export function PrintWeekly() {
-  const end = new URLSearchParams(location.search).get('end');
-  const { data: p, error } = useApi(`/api/packs/weekly${end ? `?end=${end}` : ''}`);
+  const sp = new URLSearchParams(location.search);
+  const end = sp.get('end'), days = sp.get('days');
+  const { data: p, error } = useApi(`/api/packs/weekly?${new URLSearchParams({ ...(end ? { end } : {}), ...(days ? { days } : {}) })}`);
   if (error) return <ErrorNote error={error} />;
   if (!p) return <Loading />;
   const pct = (a: number, b: number) => b ? `${Math.round(a / b * 100)}%` : '–';
-  return <PrintShell title={t('Weekly committee pack')} subtitle={`${fmtDay(p.start)} to ${fmtDay(p.end)}`} back="/packs">
+  const daily = p.days === 1;
+  return <PrintShell title={daily ? t('Daily close summary') : t('Weekly committee pack')} subtitle={daily ? fmtDay(p.end) : `${fmtDay(p.start)} to ${fmtDay(p.end)}`} back="/packs">
     <div className="print-grid">
       {p.checks && <div className="print-stat"><b>{pct(p.checks.total.done, p.checks.total.due)}</b><span>{t('checks done')} ({p.checks.total.done} / {p.checks.total.due})</span></div>}
       {p.checks && <div className="print-stat"><b>{p.checks.total.missed}</b><span>{t('checks missed')}</span></div>}
@@ -241,9 +282,16 @@ export function PrintWeekly() {
     {p.work && <section><h2>{t('Work orders')}</h2><p>{p.work.opened} {t('opened')}, {p.work.closed} {t('closed')}, {p.work.requests} {t('service requests raised this week')}.</p>
       {p.oldest.length > 0 && <table className="grid"><thead><tr><th>{t('Oldest open work')}</th><th>{t('Given to')}</th><th className="num">{t('Days open')}</th></tr></thead>
         <tbody>{p.oldest.map((w: any) => <tr key={w.ref}><td>{w.ref}: {w.title}</td><td>{w.assignee ?? '–'}</td><td className="num">{w.age}</td></tr>)}</tbody></table>}</section>}
+    {p.incidents?.length > 0 && <section><h2>{t('Incidents')}</h2><ul>{p.incidents.map((x: any) => <li key={x.ref}>{x.ref}: {x.title} ({x.status.replace('_', ' ')})</li>)}</ul></section>}
     {p.renewals?.length > 0 && <section><h2>{t('Renewals overdue or due within 30 days')}</h2><ul>{p.renewals.map((r: any) => <li key={r.ref}>{r.title}{r.provider ? ` (${r.provider})` : ''}: {fmtDay(r.ends_on)}</li>)}</ul></section>}
+    {p.services?.length > 0 && <section><h2>{t('Equipment service due or needing attention')}</h2><ul>{p.services.map((x: any) => <li key={x.ref}>{x.name}: {x.outcome !== 'passed'
+      ? t(x.outcome === 'out_of_service' ? 'out of service' : 'follow-up needed') : ''}{x.outcome !== 'passed' && x.next_due_on ? '; ' : ''}{x.next_due_on ? `${t('next service')} ${fmtDay(x.next_due_on)}` : ''}</li>)}</ul></section>}
+    {(p.milestones?.length > 0 || p.handovers?.length > 0) && <section><h2>{t('Projects')}</h2>
+      {p.milestones?.length > 0 && <ul>{p.milestones.map((m: any, i: number) => <li key={i}>{m.ref} {m.work}: {m.title}, {t('due')} {fmtDay(m.due_on)}</li>)}</ul>}
+      {p.handovers?.length > 0 && <p>{t('Handovers waiting to be accepted')}: {p.handovers.map((h: any) => `${h.work_ref} (${h.recipient})`).join('; ')}.</p>}</section>}
     {p.approvals && <section><h2>{t('Waiting for approval')}</h2>{p.approvals.length ? <table className="grid"><tbody>{p.approvals.map((a: any) => <tr key={a.ref}>
-      <td>{a.ref}: {a.title}</td><td className="num">{rupees(a.amount_paise)}</td><td className="num">{a.age} {t('days')}</td></tr>)}</tbody></table> : <p>{t('Nothing is waiting.')}</p>}
+      <td>{a.ref}: {a.title}</td><td className="num">{rupees(a.amount_paise)}</td><td className="num">{a.age} {t('days')}{a.escalated ? ' ⚑' : ''}</td></tr>)}</tbody></table> : <p>{t('Nothing is waiting.')}</p>}
+      {p.approvals.some((a: any) => a.escalated) && <p className="quiet">⚑ {t('Waiting longer than')} {p.community.escalation_days} {t('days')}.</p>}
       {p.decided?.length > 0 && <p>{t('Decided this week')}: {p.decided.map((d: any) => `${d.ref} ${t(d.status === 'approved' ? 'Approved' : 'Rejected').toLowerCase()}`).join('; ')}.</p>}</section>}
     {p.cash && <section><h2>{t('Cash and bank')}</h2><table className="grid"><thead><tr><th>{t('Account')}</th><th className="num">{t('Opening')}</th><th className="num">{t('In')}</th>
       <th className="num">{t('Out')}</th><th className="num">{t('Closing')}</th></tr></thead><tbody>{p.cash.map((c: any) => <tr key={c.name}><td>{c.name}</td><td className="num">{rupees(c.opening)}</td>
@@ -306,4 +354,46 @@ export function PrintVoucher({ id }: { id: string }) {
     </tbody></table>
     <div className="signatures">{[t('Prepared by') + `: ${v.prepared_by_name}`, t('Treasurer'), t('President or Secretary'), t('Received by')].map(s => <div key={s}><span />{s}</div>)}</div>
   </PrintShell>;
+}
+
+export function PrintAnnual() {
+  const fy = new URLSearchParams(location.search).get('fy');
+  const { data: p, error } = useApi(`/api/packs/annual${fy ? `?fy=${fy}` : ''}`);
+  if (error) return <ErrorNote error={error} />;
+  if (!p) return <Loading />;
+  const KINDS: Record<string, string> = { request: 'Service requests', incident: 'Incidents', maintenance: 'Maintenance', project: 'Projects' };
+  return <PrintShell title={`${t('Annual pack')} ${p.label}`} subtitle={`${fmtDay(p.start)} to ${fmtDay(p.end)}${p.complete ? '' : ` (${t('year to date')})`}`} back="/packs">
+    <p className="quiet">{p.community.legal_name}{p.community.registration_no ? `, ${p.community.registration_no}` : ''}. {t('Prepared from the records on the platform; for the committee to review before it is shared with owners.')}</p>
+    {p.work && <section><h2>{t('Work and maintenance')}</h2>
+      <table className="grid"><thead><tr><th>{t('Kind of work')}</th><th className="num">{t('Raised')}</th><th className="num">{t('Completed')}</th></tr></thead>
+        <tbody>{p.work.map((w: any) => <tr key={w.kind}><td>{t(KINDS[w.kind])}</td><td className="num">{w.opened}</td><td className="num">{w.completed}</td></tr>)}</tbody></table>
+      {p.requestDays && <p>{t('Service requests took')} {p.requestDays} {t('days on average to fix.')}</p>}
+      {p.services?.n > 0 && <p>{p.services.n} {t('equipment services and inspections recorded')}{p.services.issues ? `, ${p.services.issues} ${t('needing follow-up')}` : ''}.</p>}
+    </section>}
+    {p.projects?.length > 0 && <section><h2>{t('Projects')}</h2><table className="grid"><thead><tr><th>{t('Project')}</th><th>{t('Vendor')}</th>
+      <th className="num">{t('Committed')}</th><th className="num">{t('Paid')}</th><th>{t('Status')}</th></tr></thead>
+      <tbody>{p.projects.map((x: any) => <tr key={x.ref}><td>{x.ref}: {x.title}</td><td>{x.vendor ?? '–'}</td><td className="num">{x.committed_paise ? rupees(x.committed_paise) : '–'}</td>
+        <td className="num">{rupees(x.paid_paise)}</td><td>{t(STATUS_WORD[x.status] ?? x.status)}</td></tr>)}</tbody></table></section>}
+    {p.approvals && <section><h2>{t('Decisions')}</h2>{p.approvals.length ? <ul>{p.approvals.map((a: any) => <li key={a.status}>{a.n} {t(a.status)}{Number(a.amount) ? `, ${rupees(a.amount)}` : ''}</li>)}</ul>
+      : <p>{t('No decisions in this period.')}</p>}</section>}
+    {p.income && <section><h2>{t('Income and expenditure')}</h2><ReportTable r={p.income} /></section>}
+    {p.balance && <section><h2>{t('Balance sheet')}</h2><ReportTable r={p.balance} /></section>}
+    {p.budget && <section><h2>{t('Budget and actual')}</h2><ReportTable r={p.budget} /></section>}
+    {p.collection && <section><h2>{t('Billing and collection')}</h2><ReportTable r={p.collection} /></section>}
+    <p>{p.notices} {t('notices published')}; {p.documents} {t('documents added to the records library')}.</p>
+    {!p.finance && <p className="quiet">{t('The accounts appear for those who may see the books.')}</p>}
+  </PrintShell>;
+}
+const STATUS_WORD: Record<string, string> = { new: 'New', open: 'Open', in_progress: 'In progress', on_hold: 'On hold', done: 'Done', closed: 'Closed', cancelled: 'Cancelled' };
+
+function ReportTable({ r }: { r: any }) {
+  if (!r.rows?.length) return <p>{t('No entries in this period.')}</p>;
+  const cols = r.columns as { key: string; label: string; money?: boolean }[];
+  const cell = (c: any, v: any) => c.money ? (v === null || v === undefined || v === '' ? '' : rupees(v)) : v ?? '';
+  return <>
+    <table className="grid"><thead><tr>{cols.map(c => <th key={c.key} className={c.money ? 'num' : ''}>{t(c.label)}</th>)}</tr></thead>
+      <tbody>{r.rows.map((row: any, i: number) => <tr key={i}>{cols.map(c => <td key={c.key} className={c.money ? 'num' : ''}>{cell(c, row[c.key])}</td>)}</tr>)}
+        {r.totals && <tr className="total">{cols.map(c => <td key={c.key} className={c.money ? 'num' : ''}><b>{cell(c, r.totals[c.key])}</b></td>)}</tr>}</tbody></table>
+    {r.note && <p className="quiet">{r.note}</p>}
+  </>;
 }

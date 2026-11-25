@@ -14,7 +14,10 @@ import { VendorList, VendorView } from './pages/Procurement.tsx';
 import { BankList, BankView, Billing, DuesList, MoneyHome, MoneySettings, MyDues, preparesVouchers, Reports, RunView, seesBooks, UnitStatement, Vouchers,
   VoucherView } from './pages/Money.tsx';
 import { Ask, AskHistory } from './pages/Ask.tsx';
-import { DocumentView, Library, NoticeBoard, NoticeView, Packs, PrintOwners, PrintStatement, PrintVoucher, PrintWeekly } from './pages/Notices.tsx';
+import { GoToRef, OfflineBanner, QrLabels, SearchPage } from './pages/Search.tsx';
+import { Help } from './pages/Help.tsx';
+import { startOffline } from './offline.ts';
+import { DocumentView, Library, NoticeBoard, NoticeView, Packs, PrintAnnual, PrintOwners, PrintStatement, PrintVoucher, PrintWeekly } from './pages/Notices.tsx';
 import { AssetList, AssetNew, AssetView, isStaff, Requests, RoutineList, RoutineNew, RoutineView, Today, WorkOrderNew, WorkOrders,
   WorkOrderView } from './pages/Work.tsx';
 
@@ -120,6 +123,10 @@ function Frame() {
   else if (path === '/packs') page = <Packs />;
   else if (path === '/ask') page = <Ask />;
   else if (path === '/ask/history') page = <AskHistory />;
+  else if (path === '/search') page = <SearchPage />;
+  else if (path === '/help') page = <Help />;
+  else if ((r = m(/^\/go\/([A-Za-z]{2}-\d+)$/))) page = <GoToRef refText={r[1].toUpperCase()} />;
+  else if (path === '/work/qr') page = <QrLabels />;
   else if (path === '/more') page = <MoreMenu />;
   else if (path === '/settings') page = <SettingsPage />;
   else if (path === '/settings/roles') page = <Roles />;
@@ -131,6 +138,7 @@ function Frame() {
     let printed;
     if (path === '/print/weekly') printed = <PrintWeekly />;
     else if (path === '/print/owners') printed = <PrintOwners />;
+    else if (path === '/print/annual') printed = <PrintAnnual />;
     else if ((r = m(/^\/print\/statement\/([\w-]+)$/))) printed = <PrintStatement id={r[1]} />;
     else if ((r = m(/^\/print\/voucher\/([\w-]+)$/))) printed = <PrintVoucher id={r[1]} />;
     return <main className="print-main">{printed ?? <p>Not found</p>}</main>;
@@ -141,6 +149,7 @@ function Frame() {
       {community.hasLogo ? <img className="logo" src="/api/public/logo" alt="" /> : <span className="mark" aria-hidden="true">{community.brandName[0]}</span>}
       <Link to="/" className="platform">{community.platformName}</Link>
       <span className="spacer" />
+      <Link to="/search" className="search-link" aria-label="Search">{Icon.search}</Link>
       {community.languages.length > 1 && <select aria-label={t('Language')} value={lang} onChange={e => setLang(e.target.value)}>
         {community.languages.map(l => <option key={l} value={l}>{LANG_NAMES[l] ?? l}</option>)}
       </select>}
@@ -152,8 +161,9 @@ function Frame() {
         {tab.icon}<span>{tab.label}</span>{tab.badge ? <span className="badge" aria-label={`${tab.badge} waiting`}>{tab.badge}</span> : null}
       </Link>)}
     </nav>
-    <main id="main">{community.isDemo && <p className="note demo-note">This is a demo community. Every name, number and amount is made up.</p>}{page}</main>
+    <main id="main">{community.isDemo && <p className="note demo-note">This is a demo community. Every name, number and amount is made up.</p>}<OfflineBanner />{page}</main>
   </div>;
 }
 
+startOffline();
 createRoot(document.getElementById('root')!).render(<App />);

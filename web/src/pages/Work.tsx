@@ -7,6 +7,7 @@ import type { TreeNode } from './Home.tsx';
 import { CATEGORY } from './labels.ts';
 import { Quotations, seesProcurement } from './Procurement.tsx';
 import { Delivery, Permit, PERMIT_KINDS } from './Delivery.tsx';
+import { isNetworkError, queueCheck, useOffline } from '../offline.ts';
 export { CATEGORY };
 
 export const isStaff = (me: Me) => ['operations.view', 'operations.update', 'operations.manage'].some(p => can(me, p));
@@ -65,8 +66,11 @@ export function WorkTabs() {
 export function Today() {
   const { me } = useApp();
   const path = usePath();
-  const date = new URLSearchParams(path.split('?')[1] ?? '').get('date');
-  const { data, loading, error, reload } = useApi(`/api/ops/today${date ? `?date=${date}` : ''}`);
+  const params = new URLSearchParams(path.split('?')[1] ?? '');
+  const date = params.get('date'), place = params.get('place');
+  const qs = new URLSearchParams({ ...(date ? { date } : {}), ...(place ? { place } : {}) }).toString();
+  const { data, loading, error, reload } = useApi(`/api/ops/today${qs ? `?${qs}` : ''}`);
+  const queued = useOffline().queued;
   const [filter, setFilter] = useState<'all' | 'mine' | 'open'>('all');
   const [open, setOpen] = useState<any>(null);
   if (!isStaff(me)) { navigate('/requests'); return null; }
@@ -78,7 +82,8 @@ export function Today() {
   const slot = (t: string | null) => !t ? 'Any time' : t < '12:00' ? 'Morning' : t < '17:00' ? 'Afternoon' : 'Evening';
   const groups = ['Morning', 'Afternoon', 'Evening', 'Any time'].map(g => [g, rows.filter(r => slot(r.start_time) === g)] as const).filter(([, rs]) => rs.length);
   const c = data.counts;
-  const go = (d: string) => navigate(d === data.today ? '/work' : `/work?date=${d}`);
+  const go = (d: string) => navigate(`/work${d === data.today && !place ? '' : `?${new URLSearchParams({ ...(d !== data.today ? { date: d } : {}), ...(place ? { place } : {}) })}`}`);
+  const waiting = (r: any) => queued.some(q => q.routineId === r.routine_id && q.day === day);
   return <>
     <PageHead title={dayLabel(day, data.today) === 'Today' ? 'Today' : dayLabel(day, data.today)}>
       <div className="day-nav">
@@ -88,6 +93,7 @@ export function Today() {
       </div>
     </PageHead>
     <WorkTabs />
+    {data.place && <p className="note">Checks at {data.place.name} and the places inside it. <Link to={date ? `/work?date=${date}` : '/work'}>Show every place</Link></p>}
     <section className="daybar" aria-label="Progress">
       <div className="daybar-track" role="img" aria-label={`${c.done} of ${c.scheduled} done, ${c.missed} missed`}>
         {(['done', 'skipped', 'blocked', 'missed'] as const).map(k => c[k] > 0 &&
@@ -108,7 +114,7 @@ export function Today() {
         <span><span className="title">{r.title}</span><br />
           <span className="meta">{r.start_time ? `${r.start_time}${r.end_time ? `–${r.end_time}` : ''}, ` : ''}{r.place}{r.assignee ? `. ${r.assignee}` : ''}</span>
           {r.check?.note && <><br /><span className="meta note-line">“{r.check.note}”</span></>}</span>
-        <span className="side"><span className={`tag day-${r.status}`}>{DAY_STATUS[r.status]}{r.late ? ', late' : ''}</span>
+        <span className="side">{waiting(r) ? <span className="tag w-on_hold">Waiting to send</span> : <span className={`tag day-${r.status}`}>{DAY_STATUS[r.status]}{r.late ? ', late' : ''}</span>}
           {r.check?.reading && <><br /><span className="num quiet">{Number(r.check.reading)} {r.needs.reading?.unit ?? ''}</span></>}</span>
       </button>)}</div>
     </section>)}
@@ -128,10 +134,16 @@ function CheckSheet({ row, day, today, onClose, onDone }: { row: any; day: strin
   const { busy, error, run } = useAction();
   const n = row.needs;
   const save = () => run(async () => {
-    let photoFileId = null;
-    if (file) photoFileId = (await api.upload('/api/files?purpose=work_photo', file)).id;
-    await api.put(`/api/routines/${row.routine_id}/checks/${day}`, { status, performedAt: status === 'done' ? performedAt || null : null,
-      note, reading: reading || null, reference: reference || null, photoFileId, raiseWorkOrder: raise });
+    const body = { status, performedAt: status === 'done' ? performedAt || null : null, note, reading: reading || null, reference: reference || null,
+      photoFileId: null as string | null, raiseWorkOrder: raise };
+    try {
+      if (file) body.photoFileId = (await api.upload('/api/files?purpose=work_photo', file)).id;
+      await api.put(`/api/routines/${row.routine_id}/checks/${day}`, body);
+    } catch (e) {
+      // No network: keep the check on this phone and send it when the network is back.
+      if (!isNetworkError(e) || n.photo && status === 'done' && file) throw isNetworkError(e) ? new Error('This check needs its photo, which cannot be sent offline. Try again when there is signal.') : e;
+      queueCheck({ routineId: row.routine_id, day, title: row.title, body: { ...body, note: file ? `${note}${note ? ' ' : ''}(photo not sent: recorded offline)`.trim() : note } });
+    }
     onDone();
   });
   const noteLabel = status === 'skipped' ? 'Why it was skipped' : status === 'blocked' ? 'What is stopping the work' : n.remarks === 'required' ? 'Completion remarks' : 'Note (optional)';
@@ -408,7 +420,8 @@ export function RoutineList() {
   const rows = (data ?? []).filter(r => !cat || r.category === cat);
   const cats = [...new Set((data ?? []).map(r => r.category))];
   return <>
-    <PageHead title="Routines">{can(me, 'operations.manage') && <Link to="/work/routines/new" className="button primary">New routine</Link>}</PageHead>
+    <PageHead title="Routines">{can(me, 'operations.manage') && <span className="actions"><Link to="/work/qr" className="button">QR labels for places</Link>
+      <Link to="/work/routines/new" className="button primary">New routine</Link></span>}</PageHead>
     <WorkTabs />
     {cats.length > 1 && <div className="tabs" role="group" aria-label="Kind of work">
       <button aria-pressed={!cat} onClick={() => setCat('')}>All</button>

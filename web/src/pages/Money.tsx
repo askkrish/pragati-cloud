@@ -487,10 +487,12 @@ export function RunView({ id }: { id: string }) {
 export function Vouchers() {
   const { me } = useApp();
   const [state, setState] = useState(new URLSearchParams(location.search).get('state') ?? 'open');
-  const { data, loading, error } = useApi<any[]>(`/api/finance/vouchers?state=${state}`);
+  const { data, loading, error, reload } = useApi<any[]>(`/api/finance/vouchers?state=${state}`);
   const [add, setAdd] = useState(false);
+  const [importing, setImporting] = useState(false);
   return <>
-    <PageHead title="Vouchers">{preparesVouchers(me) && <button className="primary" onClick={() => setAdd(true)}>New voucher</button>}</PageHead>
+    <PageHead title="Vouchers">{preparesVouchers(me) && <span className="actions"><button onClick={() => setImporting(true)}>Import from a spreadsheet</button>
+      <button className="primary" onClick={() => setAdd(true)}>New voucher</button></span>}</PageHead>
     <MoneyTabs />
     <div className="tabs" role="group">{[['open', 'Open'], ['to_pay', 'Approved, to pay'], ['paid', 'Paid'], ['all', 'All']].map(([k, l]) =>
       <button key={k} aria-pressed={state === k} onClick={() => setState(k)}>{l}</button>)}</div>
@@ -501,7 +503,55 @@ export function Vouchers() {
         : ['rejected', 'cancelled', 'withdrawn'].includes(v.state) ? '' : 'w-on_hold'}`}>{VSTATE[v.state]}</span></span></Link>)
       : <p className="empty">No vouchers here.</p>}</div>}
     {add && <Sheet open onClose={() => setAdd(false)} title="New voucher"><VoucherForm onDone={id => { setAdd(false); navigate(`/money/vouchers/${id}`); }} /></Sheet>}
+    {importing && <Sheet open onClose={() => setImporting(false)} title="Import vouchers"><VoucherImport onDone={() => { setImporting(false); reload(); }} /></Sheet>}
   </>;
+}
+
+// A CSV saved from Excel or Google Sheets: one payment per row, checked before anything is saved.
+const IMPORT_COLUMNS = ['payee', 'description', 'amount', 'tds', 'account', 'place', 'invoice_no', 'invoice_date'];
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) { if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') quoted = false; else cell += ch; }
+    else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); cell = ''; if (row.some(c => c.trim())) rows.push(row); row = []; }
+    else cell += ch;
+  }
+  row.push(cell); if (row.some(c => c.trim())) rows.push(row);
+  return rows;
+}
+function VoucherImport({ onDone }: { onDone: () => void }) {
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [check, setCheck] = useState<any>(null);
+  const [done, setDone] = useState<any>(null);
+  const { busy, error, run } = useAction();
+  const read = (file: File) => run(async () => {
+    const table = parseCsv(await file.text());
+    const head = (table[0] ?? []).map(h => h.trim().toLowerCase().replace(/[^a-z]+/g, '_').replace(/^_|_$/g, ''));
+    if (!head.includes('payee') || !head.includes('amount') || !head.includes('account')) throw new Error('The first row must name the columns: payee, description, amount, account (and optionally tds, place, invoice_no, invoice_date).');
+    const list = table.slice(1).map(r => Object.fromEntries(head.map((h, i) => [h, (r[i] ?? '').trim()])))
+      .map(r => ({ payee: r.payee, description: r.description || r.payee, amount: r.amount, tds: r.tds || undefined, account: r.account,
+        place: r.place || undefined, invoiceNo: r.invoice_no || undefined, invoiceDate: r.invoice_date || undefined }));
+    if (!list.length) throw new Error('The file has no payment rows.');
+    if (list.length > 50) throw new Error('Import at most 50 payments at a time.');
+    setRows(list); setCheck(await api.post('/api/finance/vouchers/import', { preview: true, rows: list }));
+  });
+  if (done) return <div className="form"><p className="note ok">{done.vouchers.length} vouchers saved and sent for approval: {done.vouchers.map((v: any) => v.ref).join(', ')}.</p>
+    <div className="actions"><button className="primary" onClick={onDone}>Done</button></div></div>;
+  return <div className="form">
+    <p className="quiet">Save the sheet as CSV with these columns in the first row: {IMPORT_COLUMNS.join(', ')}. Account is the ledger code (for example 5060) or name; place is optional. Each payment becomes a voucher that goes through approval.</p>
+    <label className="field">CSV file<input type="file" accept=".csv,text/csv" onChange={e => e.target.files?.[0] && read(e.target.files[0])} /></label>
+    {check && <><table className="grid"><thead><tr><th>Line</th><th>Payee</th><th>Account</th><th className="num">Amount</th><th>Check</th></tr></thead>
+      <tbody>{check.rows.map((r: any) => <tr key={r.line}><td>{r.line}</td><td>{r.payee}</td><td>{r.account}</td><td className="num">{r.amount ? rs(r.amount) : ''}</td>
+        <td>{r.error ? <span className="stop">{r.error}</span> : 'Ready'}</td></tr>)}</tbody></table>
+      {check.errors ? <p className="note">Correct the {check.errors} {check.errors === 1 ? 'line' : 'lines'} marked above in the sheet and choose the file again. Nothing has been saved.</p>
+        : <p className="quiet">{check.rows.length} payments, {rs(check.rows.reduce((s: number, r: any) => s + r.amount, 0))} in all.</p>}</>}
+    <ErrorNote error={error} />
+    {check && !check.errors && <div className="actions"><button className="primary" disabled={busy} onClick={() => run(async () => {
+      setDone(await api.post('/api/finance/vouchers/import', { rows })); })}>Save {check.rows.length} vouchers and send them for approval</button></div>}
+  </div>;
 }
 
 function VoucherForm({ onDone }: { onDone: (id: string) => void }) {
