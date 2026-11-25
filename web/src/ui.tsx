@@ -116,4 +116,5 @@ export const Icon = {
   approve: svg(<><path d="M4 12.5 9 17.5 20 6.5" /></>),
   people: svg(<><circle cx="9" cy="8" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><circle cx="17" cy="9" r="2.4" /><path d="M16 14.2c2.4.1 4 1.6 4.5 4.3" /></>),
   more: svg(<><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></>),
+  work: svg(<><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V2.8h6V4" /><path d="m8.5 12 2.2 2.2L15.5 9.5" /><path d="M8.5 17.5h7" /></>),
 };

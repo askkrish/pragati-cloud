@@ -1,7 +1,9 @@
 import pg from 'pg';
 
 // Bigint columns (amounts in paise, audit ids) come back as strings; counts are parsed to numbers
-// explicitly where needed.
+// explicitly where needed. Dates come back exactly as stored ('2026-11-25'), never shifted by the
+// server's own time zone.
+pg.types.setTypeParser(1082, v => v);
 export type Tx = pg.PoolClient;
 
 // On Azure the app signs in to PostgreSQL with its managed identity: each new connection gets a

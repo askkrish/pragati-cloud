@@ -5,12 +5,20 @@ import { fail, forbidden, notFound } from '../errors.ts';
 import { saveUpload } from '../services/files.ts';
 import { idParam, z } from './z.ts';
 
-const PURPOSES = ['approval_letter', 'ownership_document', 'other'] as const;
+const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract'] as const;
+const OPS = ['operations.view', 'operations.update', 'operations.manage'];
 
 export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Services) {
   app.post('/api/files', async req => run.auth(req, async c => {
-    c.actor.require('files.upload', null);
     const purpose = z.enum(PURPOSES).parse((req.query as Record<string, string>).purpose);
+    // Photos of work: staff, and owners or residents adding a photo to their own request.
+    if (purpose === 'work_photo') {
+      const home = await one(c.tx, `select 1 from app.ownerships where person_id = $1 and ends_on is null
+        union select 1 from app.occupancies where person_id = $1 and ends_on is null`, [c.actor.personId]);
+      if (!home && !OPS.some(p => c.actor.canAnywhere(p))) forbidden();
+    } else if (purpose === 'contract') {
+      if (!c.actor.canAnywhere('operations.manage')) forbidden();
+    } else c.actor.require('files.upload', null);
     const part = await req.file() ?? fail(400, 'Choose a file.', 'invalid');
     return saveUpload(c, svc.storage, part!, purpose);
   }));
@@ -19,10 +27,17 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
   app.get('/api/files/:id', async (req, reply) => {
     const f = await run.auth(req, async ({ tx, actor }) => {
       const f = await one(tx, `select * from app.files where id = $1`, [idParam.parse(req.params).id]) ?? notFound('That file');
+      const staff = actor.canAnywhere('operations.view') || actor.canAnywhere('operations.manage');
       const allowed = f.uploaded_by === actor.personId || f.purpose === 'logo'
         || (f.purpose === 'approval_letter' && actor.canAnywhere('approvals.view'))
         || (f.purpose === 'ownership_document' && actor.canAnywhere('people.view'))
-        || (f.purpose === 'other' && actor.canAnywhere('audit.view'));
+        || (f.purpose === 'other' && actor.canAnywhere('audit.view'))
+        || (f.purpose === 'contract' && staff)
+        || (f.purpose === 'work_photo' && (staff || !!await one(tx, `select 1 from app.work_updates u
+              join app.work_orders w on w.tenant_id = u.tenant_id and w.id = u.work_order_id
+             where u.file_id = $1 and (w.assignee_person_id = $2 or (w.raised_by = $2 and not u.staff_only))
+            union select 1 from app.routine_checks c join app.routines r on r.tenant_id = c.tenant_id and r.id = c.routine_id
+             where c.photo_file_id = $1 and $2 in (r.assignee_person_id, r.backup_person_id)`, [f.id, actor.personId])));
       if (!allowed) notFound('That file');
       return f;
     });
@@ -47,7 +62,8 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
   // embedded; they are exported separately from storage.
   const EXPORT_TABLES = ['tenants', 'property_nodes', 'unit_types', 'units', 'parking_slots', 'meters', 'facilities', 'people',
     'ownerships', 'occupancies', 'roles', 'memberships', 'committees', 'committee_seats', 'approval_rules',
-    'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'files', 'audit_events'];
+    'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'assets', 'asset_contracts',
+    'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'files', 'audit_events'];
 
   app.get('/api/export', async (req, reply) => {
     const data = await run.auth(req, async ({ tx, actor, audit, tenant }) => {

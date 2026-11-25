@@ -59,7 +59,7 @@ small, .quiet { color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* ---------- frame ---------- */
-.frame { min-height: 100dvh; display: grid; grid-template-columns: 1fr; }
+.frame { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
 .topbar {
   position: sticky; top: 0; z-index: 10; background: var(--brand); color: white;
   display: flex; align-items: center; gap: 12px; padding: 10px 18px; padding-top: max(10px, env(safe-area-inset-top));
@@ -94,7 +94,7 @@ small, .quiet { color: var(--ink-2); }
 main { padding: 20px 16px 110px; width: 100%; max-width: 980px; margin: 0 auto; display: grid; gap: 28px; align-content: start; }
 
 @media (min-width: 900px) {
-  .frame { grid-template-columns: 230px 1fr; grid-template-rows: auto 1fr; }
+  .frame { grid-template-columns: 230px minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .topbar { grid-column: 1 / -1; padding: 12px 28px; }
   .topbar .desktop-only { display: inline-flex; }
   .nav {
@@ -261,3 +261,76 @@ table.grid tr.click:hover td { background: var(--brand-wash); }
 
 .demo-note { font-size: 0.95rem; }
 .signin .hero .demo-tag { display: inline-block; padding: 8px 12px; border-radius: var(--radius-s); background: color-mix(in oklab, white 16%, transparent); max-width: none; }
+
+/* ---------- operations ---------- */
+.stop { color: var(--stop); }
+.tabs .button { min-height: 38px; padding: 7px 14px; border-radius: 999px; }
+.tabs .button[aria-current='page'] { background: var(--ink); border-color: var(--ink); color: white; }
+.day-nav { display: flex; gap: 6px; align-items: center; }
+.day-nav button { min-height: 40px; padding: 6px 14px; font-size: 1.2rem; }
+.day-nav input { width: auto; max-width: 170px; min-height: 40px; }
+@media (max-width: 899px) { .nav .desktop-tab { display: none; } }
+
+/* The day at a glance: one bar, coloured by what happened to each check. */
+.daybar { gap: 8px; }
+.daybar-track { display: flex; height: 14px; border-radius: 7px; background: var(--line-2); overflow: hidden; }
+.daybar-track .seg { display: block; height: 100%; }
+.seg.done { background: var(--yes); } .seg.skipped { background: var(--ink-3); } .seg.blocked { background: var(--no); } .seg.missed { background: var(--stop); }
+
+/* A check is a row with a mark on the left that shows its state at a glance. */
+button.row { width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line-2); border-radius: 0; background: transparent;
+  font: inherit; min-height: 0; justify-content: stretch; cursor: pointer; }
+.rows > button.row:first-child { border-top: 0; }
+button.row:hover { background: var(--brand-wash); border-color: var(--line-2); }
+.check-row { grid-template-columns: 22px 1fr auto; }
+.check-row .mark { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); align-self: start; margin-top: 3px; position: relative; }
+.s-done .mark { background: var(--yes); border-color: var(--yes); }
+.s-done .mark::after { content: ''; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.s-missed .mark { border-color: var(--stop); background: #fbe9e7; }
+.s-due .mark { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
+.s-in_progress .mark { border-color: var(--brand); background: linear-gradient(90deg, var(--brand) 50%, transparent 50%); }
+.s-skipped .mark { border-color: var(--ink-3); background: linear-gradient(transparent 44%, var(--ink-3) 44% 56%, transparent 56%); }
+.s-blocked .mark { border-color: var(--no); background: var(--no-wash); }
+.s-upcoming .mark { border-style: dashed; }
+.note-line { font-style: italic; }
+
+.tag.day-done, .tag.w-done, .tag.r-active { background: var(--yes-wash); color: var(--yes); }
+.tag.day-missed, .tag.w-overdue, .tag.r-overdue, .tag.pri-urgent { background: #fbe9e7; color: var(--stop); }
+.tag.day-due, .tag.day-in_progress, .tag.w-open, .tag.w-in_progress { background: var(--brand-wash); color: var(--brand-ink); }
+.tag.day-blocked, .tag.w-on_hold, .tag.w-new, .tag.r-due, .tag.pri-high { background: var(--no-wash); color: var(--no); }
+.tag.staff-tag { margin-left: 8px; background: var(--ink); color: white; font-size: 0.75rem; }
+
+/* Last 30 days: one square per scheduled day. */
+.strip { display: flex; flex-wrap: wrap; gap: 5px; }
+.cell { width: 34px; height: 34px; min-height: 0; padding: 0; border-radius: 6px; border: 1.5px solid var(--line); background: var(--paper);
+  font-size: 0.8rem; color: var(--ink-2); display: grid; place-items: center; }
+.cell.s-done { background: var(--yes); border-color: var(--yes); color: white; }
+.cell.s-done.late { background: repeating-linear-gradient(135deg, var(--yes) 0 5px, #57a57a 5px 8px); }
+.cell.s-missed { background: #fbe9e7; border-color: var(--stop); color: var(--stop); }
+.cell.s-skipped { background: var(--line-2); }
+.cell.s-blocked { background: var(--no-wash); border-color: var(--no); color: var(--no); }
+.cell.s-due, .cell.s-in_progress { border-color: var(--brand); color: var(--brand-ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.9rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .cell { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+/* The trail of a work order. */
+.trail { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.trail li { display: grid; grid-template-columns: 112px 1fr; gap: 14px; padding: 10px 0 14px; border-top: 1px solid var(--line-2); }
+.trail li:first-child { border-top: 0; }
+.trail .when { color: var(--ink-3); font-size: 0.9rem; padding-top: 2px; }
+.trail li.staff > div { border-left: 3px solid var(--ink); padding-left: 10px; }
+.trail p { margin-top: 2px; white-space: pre-wrap; max-width: 64ch; }
+.thumb { display: block; margin-top: 8px; max-width: 220px; max-height: 220px; border-radius: var(--radius-s); border: 1px solid var(--line); }
+@media (max-width: 560px) { .trail li { grid-template-columns: 1fr; gap: 2px; } }
+
+fieldset.panel { margin: 0; border: 1px solid var(--line); }
+fieldset legend { font-weight: 700; font-family: var(--display); padding: 0 6px; }
+
+.ops-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.tile { display: grid; gap: 2px; padding: 14px 16px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-m);
+  color: var(--ink); text-decoration: none; }
+.tile:hover { border-color: var(--brand); }
+.tile .big { font: 700 var(--step-3)/1.1 var(--display); }
+.tile .big small { font-size: 1.1rem; color: var(--ink-3); font-weight: 500; }
+.tile span:nth-child(2) { color: var(--ink-2); }

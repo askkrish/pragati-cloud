@@ -10,6 +10,8 @@ import { PlaceView, UnitView } from './pages/Places.tsx';
 import { ApprovalList, ApprovalNew, ApprovalView } from './pages/Approvals.tsx';
 import { Committees, PeopleList, PersonView } from './pages/People.tsx';
 import { Activity, MoreMenu, Roles, Rules, SettingsPage } from './pages/Settings.tsx';
+import { AssetList, AssetNew, AssetView, isStaff, Requests, RoutineList, RoutineNew, RoutineView, Today, WorkOrderNew, WorkOrders,
+  WorkOrderView } from './pages/Work.tsx';
 
 export type Community = { platformName: string; brandName: string; primaryColor: string; languages: string[]; assistantName: string; hasLogo: boolean; isDemo: boolean };
 export type Me = { person: { id: string; name: string; phone: string }; roles: { key: string; name: string; scope: string | null }[];
@@ -50,11 +52,14 @@ function Frame() {
   const { community, me } = useApp();
   const path = usePath().split('?')[0];
   const lang = useLang();
-  const tabs = [
+  // Staff see the day's work; owners and residents see their own requests. People sits under More on phones.
+  const tabs: { to: string; label: string; icon: React.ReactNode; match: (p: string) => boolean; badge?: number; desktopOnly?: boolean }[] = [
     { to: '/', label: t('Home'), icon: Icon.home, match: (p: string) => p === '/' },
-    { to: '/places', label: t('Places'), icon: Icon.plan, match: (p: string) => p.startsWith('/places') || p.startsWith('/units') },
+    isStaff(me) ? { to: '/work', label: t('Work'), icon: Icon.work, match: (p: string) => p.startsWith('/work') }
+      : { to: '/requests', label: t('Requests'), icon: Icon.work, match: (p: string) => p.startsWith('/requests') || p.startsWith('/work') },
     { to: '/approvals', label: t('Approvals'), icon: Icon.approve, match: (p: string) => p.startsWith('/approvals'), badge: me.waitingForMyVote },
-    { to: '/people', label: t('People'), icon: Icon.people, match: (p: string) => p.startsWith('/people') || p.startsWith('/committees') },
+    { to: '/places', label: t('Places'), icon: Icon.plan, match: (p: string) => p.startsWith('/places') || p.startsWith('/units') },
+    { to: '/people', label: t('People'), icon: Icon.people, match: (p: string) => p.startsWith('/people') || p.startsWith('/committees'), desktopOnly: true },
     { to: '/more', label: t('More'), icon: Icon.more, match: (p: string) => p.startsWith('/more') || p.startsWith('/settings') },
   ];
 
@@ -71,6 +76,17 @@ function Frame() {
   else if (path === '/people') page = <PeopleList />;
   else if ((r = m(/^\/people\/([\w-]+)$/))) page = <PersonView id={r[1]} />;
   else if (path === '/committees') page = <Committees />;
+  else if (path === '/work') page = <Today />;
+  else if (path === '/work/orders') page = <WorkOrders />;
+  else if (path === '/work/orders/new') page = <WorkOrderNew />;
+  else if ((r = m(/^\/work\/orders\/([\w-]+)$/))) page = <WorkOrderView id={r[1]} />;
+  else if (path === '/work/routines') page = <RoutineList />;
+  else if (path === '/work/routines/new') page = <RoutineNew />;
+  else if ((r = m(/^\/work\/routines\/([\w-]+)$/))) page = <RoutineView id={r[1]} />;
+  else if (path === '/work/assets') page = <AssetList />;
+  else if (path === '/work/assets/new') page = <AssetNew />;
+  else if ((r = m(/^\/work\/assets\/([\w-]+)$/))) page = <AssetView id={r[1]} />;
+  else if (path === '/requests') page = <Requests />;
   else if (path === '/more') page = <MoreMenu />;
   else if (path === '/settings') page = <SettingsPage />;
   else if (path === '/settings/roles') page = <Roles />;
@@ -90,7 +106,7 @@ function Frame() {
       <button className="desktop-only" onClick={() => signOut()} style={{ minHeight: 36, padding: '6px 12px' }}>{t('Sign out')}</button>
     </header>
     <nav className="nav" aria-label="Main">
-      {tabs.map(tab => <Link key={tab.to} to={tab.to} aria-current={tab.match(path) ? 'page' : undefined}>
+      {tabs.map(tab => <Link key={tab.to} to={tab.to} aria-current={tab.match(path) ? 'page' : undefined} className={tab.desktopOnly ? 'desktop-tab' : undefined}>
         {tab.icon}<span>{tab.label}</span>{tab.badge ? <span className="badge" aria-label={`${tab.badge} waiting`}>{tab.badge}</span> : null}
       </Link>)}
     </nav>

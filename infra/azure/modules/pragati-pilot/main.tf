@@ -508,3 +508,83 @@ resource "azurerm_container_app_job" "seed" {
 
   depends_on = [time_sleep.roles]
 }
+
+# Keeps the demo communities' sample checklist current: three short runs a day add the checks a
+# real team would have recorded since the last run. Each run takes seconds on a quarter of a vCPU,
+# well inside the Container Apps free monthly allowance. Times are UTC (06:45, 13:45, 18:45 in India).
+resource "azurerm_container_app_job" "demo_refresh" {
+  name                         = "caj-${var.name}-demo"
+  location                     = local.location
+  resource_group_name          = local.rg
+  container_app_environment_id = azurerm_container_app_environment.this.id
+  replica_timeout_in_seconds   = 300
+  replica_retry_limit          = 0
+  workload_profile_name        = "Consumption"
+  tags                         = local.tags
+
+  schedule_trigger_config {
+    cron_expression          = "15 1,8,13 * * *"
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.app.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.this.login_server
+    identity = azurerm_user_assigned_identity.app.id
+  }
+
+  secret {
+    name  = "db-url-app"
+    value = local.db_url.web
+  }
+  secret {
+    name  = "db-url-ops"
+    value = local.db_url.ops
+  }
+  secret {
+    name  = "app-secret"
+    value = random_password.app_secret.result
+  }
+
+  template {
+    container {
+      name    = "demo"
+      image   = local.image
+      command = ["node", "dist/server/samples.js"]
+      cpu     = 0.25
+      memory  = "0.5Gi"
+      env {
+        name        = "DATABASE_URL_APP"
+        secret_name = "db-url-app"
+      }
+      env {
+        name        = "DATABASE_URL_PLATFORM"
+        secret_name = "db-url-ops"
+      }
+      env {
+        name  = "PRAGATI_BASE_DOMAIN"
+        value = var.base_domain
+      }
+      env {
+        name  = "PRAGATI_DEMO_HOST"
+        value = azurerm_container_app.web.ingress[0].fqdn
+      }
+      # The seed shares the app's code, which checks its production settings on start.
+      env {
+        name        = "PRAGATI_SECRET"
+        secret_name = "app-secret"
+      }
+      env {
+        name  = "SMS_PROVIDER"
+        value = "none"
+      }
+    }
+  }
+
+  depends_on = [time_sleep.roles, azurerm_container_app_job.seed]
+}

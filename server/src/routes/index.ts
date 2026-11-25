@@ -7,9 +7,13 @@ import { peopleRoutes } from './people.ts';
 import { committeeRoutes } from './committees.ts';
 import { approvalRoutes } from './approvals.ts';
 import { recordRoutes } from './records.ts';
+import { operationsRoutes } from './operations.ts';
+import { workRoutes } from './work.ts';
+import { assetRoutes } from './assets.ts';
 
 export async function registerRoutes(app: FastifyInstance, run: Runner, svc: Services) {
-  for (const r of [authRoutes, communityRoutes, propertyRoutes, peopleRoutes, committeeRoutes, approvalRoutes, recordRoutes]) {
+  for (const r of [authRoutes, communityRoutes, propertyRoutes, peopleRoutes, committeeRoutes, approvalRoutes, recordRoutes,
+    operationsRoutes, workRoutes, assetRoutes]) {
     await r(app, run, svc);
   }
 }

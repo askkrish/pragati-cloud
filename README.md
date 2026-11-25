@@ -19,6 +19,19 @@ This is a new codebase. JAOA Pragati keeps running unchanged; this repository ca
 | Records | Append-only audit trail of every change; a full data export per community. |
 | Azure | Terraform for the shared cloud, a dedicated installation and an installation in a customer's own subscription. |
 
+## Phase 2, module 1: operations
+
+Carried over from JAOA Pragati's daily operations, projects, service requests and asset register, and rebuilt for many blocks.
+
+| Area | What works |
+| --- | --- |
+| Daily checklist | Routines due daily, on chosen weekdays, monthly (including "last day"), quarterly, half-yearly, yearly or once, each with an optional time window. Staff mark a check done, started, skipped (with a reason) or blocked; a day with nothing recorded after its window is missed, and work recorded after the window is late. Readings, reference numbers, photos and remarks can be required per routine. |
+| Schedule history | A schedule change applies from today or a later day; past days are always judged by the schedule that applied then. |
+| Work orders | Service requests raised by owners and residents for their own home, incidents, maintenance and projects. Status moves with the reason where it matters (on hold, done, reopened, cancelled); the person who raised a request confirms the fix. Updates can be staff-only; residents never see staff-only notes, estimates or staff names. A blocked check can raise a work order. Spending goes through the community's approval rules. |
+| Assets and renewals | Lifts, generators, pumps, STPs and other equipment by place, with AMCs, warranties, insurance, licences and inspections. Renewing keeps the old record; overdue and due-soon items show on the home page. |
+| Access | Operations permissions per role and per block: committee members see, facility managers set up and assign, staff without full view see only what is given to them. |
+
+
 ## Running it locally
 
 Needs Node 22 and PostgreSQL 16.
@@ -32,7 +45,7 @@ npm run build && PRAGATI_DEV_SHOW_OTP=1 npm start
 
 Open http://maple-court.localhost:8080, http://riverside-greens.localhost:8080 or http://palm-meadows.localhost:8080. Sign in as an administrator with 90000 10001, 90000 20001 or 90000 30001; in development the code is shown on screen. All sample data is invented.
 
-`npm test` runs 51 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
+`npm test` runs 66 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
 
 ## Layout
 

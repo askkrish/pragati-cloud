@@ -8,6 +8,7 @@ import type { TreeNode } from './Home.tsx';
 export function MoreMenu() {
   const { me, community } = useApp();
   const items = [
+    can(me, 'people.view') && { to: '/people', label: t('People'), meta: 'Owners, residents, staff and their access' },
     can(me, 'committees.view') && { to: '/committees', label: t('Committees'), meta: 'Managing, block and phase committees' },
     can(me, 'settings.manage') && { to: '/settings', label: 'Platform name and look', meta: `${community.platformName}, colours, logo, languages` },
     (can(me, 'roles.manage') || can(me, 'members.manage')) && { to: '/settings/roles', label: 'Roles', meta: 'What each role can see and do' },
