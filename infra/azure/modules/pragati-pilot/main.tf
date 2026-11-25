@@ -503,6 +503,23 @@ resource "azurerm_container_app_job" "seed" {
         name  = "SMS_PROVIDER"
         value = "none"
       }
+      # Sample documents and notice attachments go to the same file store the app reads.
+      env {
+        name  = "STORAGE_DRIVER"
+        value = "azure"
+      }
+      env {
+        name  = "AZURE_STORAGE_ACCOUNT"
+        value = azurerm_storage_account.files.name
+      }
+      env {
+        name  = "AZURE_STORAGE_CONTAINER"
+        value = azurerm_storage_container.files.name
+      }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.app.client_id
+      }
     }
   }
 
@@ -582,6 +599,23 @@ resource "azurerm_container_app_job" "demo_refresh" {
       env {
         name  = "SMS_PROVIDER"
         value = "none"
+      }
+      # Sample documents and notice attachments go to the same file store the app reads.
+      env {
+        name  = "STORAGE_DRIVER"
+        value = "azure"
+      }
+      env {
+        name  = "AZURE_STORAGE_ACCOUNT"
+        value = azurerm_storage_account.files.name
+      }
+      env {
+        name  = "AZURE_STORAGE_CONTAINER"
+        value = azurerm_storage_container.files.name
+      }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.app.client_id
       }
     }
   }

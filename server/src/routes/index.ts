@@ -13,10 +13,11 @@ import { assetRoutes } from './assets.ts';
 import { procurementRoutes } from './procurement.ts';
 import { financeRoutes } from './finance.ts';
 import { financeReportRoutes } from './finance-reports.ts';
+import { noticeRoutes } from './notices.ts';
 
 export async function registerRoutes(app: FastifyInstance, run: Runner, svc: Services) {
   for (const r of [authRoutes, communityRoutes, propertyRoutes, peopleRoutes, committeeRoutes, approvalRoutes, recordRoutes,
-    operationsRoutes, workRoutes, assetRoutes, procurementRoutes, financeRoutes, financeReportRoutes]) {
+    operationsRoutes, workRoutes, assetRoutes, procurementRoutes, financeRoutes, financeReportRoutes, noticeRoutes]) {
     await r(app, run, svc);
   }
 }

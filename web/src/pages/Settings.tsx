@@ -8,6 +8,9 @@ import type { TreeNode } from './Home.tsx';
 export function MoreMenu() {
   const { me, community } = useApp();
   const items = [
+    { to: '/notices', label: t('Notices'), meta: 'From the association, for everyone or your block' },
+    { to: '/records', label: 'Records library', meta: 'Bye-laws, minutes, accounts and other documents' },
+    { to: '/packs', label: 'Report packs', meta: 'Weekly committee pack and owners\' monthly update, to print or save as PDF' },
     can(me, 'property.view') && { to: '/places', label: t('Places'), meta: 'Blocks, homes and shared facilities' },
     can(me, 'people.view') && { to: '/people', label: t('People'), meta: 'Owners, residents, staff and their access' },
     can(me, 'committees.view') && { to: '/committees', label: t('Committees'), meta: 'Managing, block and phase committees' },

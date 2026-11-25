@@ -55,6 +55,16 @@ Full books for each community, as agreed in the commercial plan, with export to 
 | Reports | Income and expenditure (also for one block), balance sheet, trial balance, cash and bank, dues by home, billing and collection, budget and actual, day book; each downloads for Excel. Tally ledgers and entries download as XML. |
 | Roles | A Treasurer role keeps the books; committees and auditors read them; facility managers prepare vouchers. |
 
+## Phase 2, module 4: notices, records and report packs
+
+| Area | What works |
+| --- | --- |
+| Notices | For everyone, owners, the committee or staff, across the community or for one block or phase. Publish now or at a set time, pin, take down on a date, attach a PDF or picture, withdraw with a reason. Residents see what is new; the publisher sees how many have opened it. |
+| Records library | Bye-laws, minutes, AGM papers, accounts, audit reports, insurance, licences, contracts, plans. Each document is seen by everyone, owners, the committee or the finance team; new versions keep the old ones; review dates flag licences and policies that need renewing. Files always download through the access check. |
+| Weekly committee pack | Checks done and missed by kind of work, work opened and closed, the oldest open work, renewals, approvals waiting and decided, cash and bank, payments and dues. Each part appears only for those allowed to see it. |
+| Owners' monthly update | Checks done, requests fixed and how fast, work completed, collection rate, notices: counts only, no names or amounts. |
+| Printing | Packs, statements of dues and payment vouchers open as A4 pages to print or save as PDF from the browser, which shapes Tamil correctly. Voucher pages carry signature lines. |
+
 
 
 

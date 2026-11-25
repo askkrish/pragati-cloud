@@ -5,7 +5,7 @@
 import { Actor } from '../server/src/actor.ts';
 import { many, one, type Tx } from '../server/src/db.ts';
 import * as engine from '../server/src/services/approvals.ts';
-import { addDays, isLate, localNow, normalise, occursOn, versionOn, zonedInstant } from '../server/src/services/schedule.ts';
+import { addDays, daysBetween, isLate, localNow, normalise, occursOn, versionOn, zonedInstant } from '../server/src/services/schedule.ts';
 
 type Staff = [name: string, phone: string, role: string, scope?: string];
 type Asset = [name: string, kind: string, place: string, serviceBy: string, facility?: string];
@@ -143,14 +143,20 @@ export async function seedOperations(tx: Tx, slug: string, seedNo: number) {
 // within the window, some late, a few skipped or blocked with a reason, and the rest missed.
 async function topUpChecks(tx: Tx, _plan: Plan, _people: Record<string, string>, rand: () => number, today: string) {
   const now = localNow(TZ);
-  const routines = await many(tx, `select r.*, coalesce((select max(occurrence_on) from app.routine_checks c where c.routine_id = r.id), null) as last_check
+  const routines = await many(tx, `select r.*, (select max(occurrence_on) from app.routine_checks c where c.routine_id = r.id) as last_check,
+      (select min(occurrence_on) from app.routine_checks c where c.routine_id = r.id) as first_check
     from app.routines r where r.archived_at is null and r.assignee_person_id is not null`);
   const versions = (await many(tx, `select * from app.routine_schedules`)).map(normalise);
   let added = 0;
   for (const r of routines) {
     const vs = versions.filter(v => (v as any).routine_id === r.id);
-    const from = r.last_check ? addDays(String(r.last_check), 1) : addDays(today, -35);
-    for (let day = from; day <= today; day = addDays(day, 1)) {
+    const began = vs.map(v => v.effective_from).sort()[0] ?? addDays(today, -35);
+    // History runs from the day the routine began. A long stretch before the first check (an older
+    // demo that kept only 35 days) is filled once; after that only the days since the last check are.
+    const ranges: [string, string][] = [];
+    if (r.first_check && daysBetween(began, String(r.first_check)) > 7) ranges.push([began, addDays(String(r.first_check), -1)]);
+    ranges.push([r.last_check ? addDays(String(r.last_check), 1) : began, today]);
+    for (const [from, to] of ranges) for (let day = from; day <= to; day = addDays(day, 1)) {
       const s = versionOn(vs, day);
       if (!s || !occursOn(s, day)) continue;
       if (day === today && (!s.end_time || s.end_time > now.minute)) {

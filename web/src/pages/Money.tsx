@@ -253,8 +253,8 @@ export function UnitStatement({ id }: { id: string }) {
   const bal = d.dues?.balance ?? 0;
   return <>
     <PageHead title={`${d.unit.label}: dues`} crumbs={[{ to: '/money/dues', label: 'Dues' }, { label: d.unit.label }]}>
-      {keepsBooks(me) && <div className="actions"><button className="primary" onClick={() => setSheet('receipt')}>Record a payment</button>
-        <button onClick={() => setSheet('charge')}>Add a charge</button></div>}
+      <div className="actions">{keepsBooks(me) && <><button className="primary" onClick={() => setSheet('receipt')}>Record a payment</button>
+        <button onClick={() => setSheet('charge')}>Add a charge</button></>}<Link to={`/print/statement/${id}`} className="button">Print statement</Link></div>
     </PageHead>
     <dl className="facts">
       <div><dt>{bal < 0 ? 'Paid in advance' : 'Owed now'}</dt><dd className={bal > 0 ? 'stop' : ''}>{rs(Math.abs(bal))}</dd></div>
@@ -316,6 +316,7 @@ export function MyDues() {
         <div className="actions">
           {upi && <a className="button primary" href={upi}>Pay {rs(bal)} by UPI</a>}
           <button onClick={() => setPay(h)}>I have paid</button>
+          <Link to={`/print/statement/${h.unit.id}`} className="button">Statement</Link>
         </div>
         {h.lines.length > 0 && <details><summary className="quiet">Recent charges and payments</summary><Statement lines={[...h.lines].reverse()} /></details>}
       </section>;
@@ -567,6 +568,7 @@ export function VoucherView({ id }: { id: string }) {
     <div className="actions">
       {v.actions.pay && <button className="primary" onClick={() => setSheet('pay')}>Pay {rs(net)}</button>}
       {v.actions.cancel && <button onClick={() => setSheet('cancel')}>Cancel voucher</button>}
+      <Link to={`/print/voucher/${id}`} className="button">Print voucher</Link>
     </div>
     {sheet === 'pay' && <Sheet open onClose={() => setSheet(null)} title={`Pay ${v.payee}`}>
       <div className="two">

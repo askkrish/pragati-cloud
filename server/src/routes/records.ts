@@ -4,8 +4,9 @@ import { many, one } from '../db.ts';
 import { fail, forbidden, notFound } from '../errors.ts';
 import { saveUpload } from '../services/files.ts';
 import { idParam, z } from './z.ts';
+import { audienceOf, seesDocument, seesNotice } from './notices.ts';
 
-const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation', 'invoice', 'payment_proof'] as const;
+const PURPOSES = ['approval_letter', 'ownership_document', 'other', 'work_photo', 'contract', 'quotation', 'invoice', 'payment_proof', 'document', 'notice'] as const;
 const OPS = ['operations.view', 'operations.update', 'operations.manage'];
 
 export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Services) {
@@ -20,6 +21,10 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
       if (!c.actor.canAnywhere('operations.manage')) forbidden();
     } else if (purpose === 'quotation') {
       if (!c.actor.canAnywhere('procurement.manage')) forbidden();
+    } else if (purpose === 'document') {
+      if (!c.actor.canAnywhere('documents.manage')) forbidden();
+    } else if (purpose === 'notice') {
+      if (!c.actor.canAnywhere('notices.publish')) forbidden();
     } else if (purpose === 'invoice') {
       if (!c.actor.canAnywhere('finance.prepare') && !c.actor.can('finance.manage')) forbidden();
     } else c.actor.require('files.upload', null);
@@ -45,7 +50,16 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
              where u.file_id = $1 and (w.assignee_person_id = $2 or (w.raised_by = $2 and not u.staff_only))
             union select 1 from app.routine_checks c join app.routines r on r.tenant_id = c.tenant_id and r.id = c.routine_id
              where c.photo_file_id = $1 and $2 in (r.assignee_person_id, r.backup_person_id)`, [f.id, actor.personId])));
-      if (!allowed) notFound('That file');
+      let shared = false;
+      if (!allowed && (f.purpose === 'document' || f.purpose === 'notice')) {
+        const w = await audienceOf(tx, actor);
+        shared = f.purpose === 'document'
+          ? (await many(tx, `select d.*, n.ancestor_ids from app.documents d left join app.property_nodes n on n.tenant_id = d.tenant_id and n.id = d.node_id
+              where d.file_id = $1`, [f.id])).some(d => seesDocument(w, d))
+          : (await many(tx, `select x.*, n.ancestor_ids from app.notices x left join app.property_nodes n on n.tenant_id = x.tenant_id and n.id = x.scope_node_id
+              where x.file_id = $1 and x.withdrawn_at is null and x.publish_at <= now()`, [f.id])).some(x => seesNotice(w, x));
+      }
+      if (!allowed && !shared) notFound('That file');
       return f;
     });
     const body = await svc.storage.get(f.storage_key);
@@ -72,7 +86,7 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
     'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'assets', 'asset_contracts',
     'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'vendors', 'quotes', 'vendor_selections', 'vendor_reviews',
     'finance_settings', 'ledger_accounts', 'journals', 'journal_lines', 'charge_plans', 'billing_runs', 'billing_run_lines', 'payment_claims',
-    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'files', 'audit_events'];
+    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'notices', 'notice_reads', 'documents', 'files', 'audit_events'];
 
   app.get('/api/export', async (req, reply) => {
     const data = await run.auth(req, async ({ tx, actor, audit, tenant }) => {

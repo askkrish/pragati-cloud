@@ -28,4 +28,6 @@ Done in module 2 (procurement): vendors, quotations with the GST basis and terms
 
 Done in module 3 (finance): JAOA's cash book, dues, bills, vouchers, journals, period close, statement reconciliation and reports, rebuilt as a double-entry ledger with billing plans for many blocks, owners' payment reports and Tally export.
 
-Still to come: notices, records library, reports and weekly packs, Ask Pragathi, and the Tamil PDF layouts. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.
+Done in module 4 (notices, records and packs): JAOA's notices, document register, weekly committee report and owners' update, now with audiences and places, versions and review dates, and print-ready pages in English or Tamil in place of server-made PDFs.
+
+Still to come: Ask Pragathi. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.
