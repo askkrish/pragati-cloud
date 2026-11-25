@@ -68,6 +68,18 @@ Full books for each community, as agreed in the commercial plan, with export to 
 
 
 
+## Phase 2, module 5: Ask Pragathi
+
+Questions in plain words, in English or Tamil, answered by Claude from the community's own records.
+
+| Area | How it works |
+| --- | --- |
+| What it can see | Only what the person asking may see. Each lookup the assistant makes is an ordinary request to the app's own API with the asker's session, so it passes the same permission checks and row-level security as the screens. It can read dues, requests, work orders, quotations, assets, renewals, vendors, approvals, notices, the records library's titles, packs and, for those allowed, the books and reports. |
+| What it cannot do | Change anything: it has no write lookups. Lookups are a fixed list; ids are checked, so a lookup cannot be steered to another address. |
+| Privacy | Phone numbers, email addresses, UPI and bank details, and storage internals are removed before anything leaves the app. A community switches the assistant on in the app (Ask Pragathi, under More) after reading what is sent to the AI provider. Demo communities have it on. |
+| Cost | Haiku by default (`ASK_MODEL`), with the instructions and lookup list cached. Each question is logged with its token counts. Limits: 25 questions per person per day and 1,500 per community per month (`ASK_DAILY_LIMIT`, `ASK_MONTHLY_LIMIT`). |
+| Switching it on | Add the `ANTHROPIC_API_KEY` repository secret in GitHub; the next deploy passes it to the app as a Container Apps secret. Without it the assistant is off everywhere. |
+
 ## Running it locally
 
 Needs Node 22 and PostgreSQL 16.

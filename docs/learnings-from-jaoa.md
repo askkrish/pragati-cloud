@@ -30,4 +30,6 @@ Done in module 3 (finance): JAOA's cash book, dues, bills, vouchers, journals, p
 
 Done in module 4 (notices, records and packs): JAOA's notices, document register, weekly committee report and owners' update, now with audiences and places, versions and review dates, and print-ready pages in English or Tamil in place of server-made PDFs.
 
-Still to come: Ask Pragathi. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.
+Done in module 5 (Ask Pragathi): JAOA's assistant, rebuilt so that it answers through the same API and permissions as the screens rather than from a copy of the workspace, with contact details removed, a community-level switch, per-person and per-community limits, and a log of every question with its cost.
+
+Everything in JAOA Pragati now has a home in Pragati Cloud. What remains before real communities: SMS sign-in (MSG91 and DLT), a custom domain, a Tamil review of the wording, a penetration test, a restore drill, and the data processing agreement. These modules plug into the approval engine through `subject_type` and `subject_id`, as work orders already do.

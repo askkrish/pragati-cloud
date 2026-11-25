@@ -46,6 +46,14 @@ export const config = {
   // Sign in to PostgreSQL with the app's managed identity instead of a password.
   pgEntra: env.AZURE_PG_ENTRA === '1',
   webDir: env.PRAGATI_WEB_DIR ?? 'dist/web',
+  // Ask Pragathi. Without a key the assistant is off everywhere; each community also switches it on.
+  ask: {
+    apiKey: env.ANTHROPIC_API_KEY ?? '',
+    baseUrl: env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
+    model: env.ASK_MODEL ?? 'claude-haiku-5-5',
+    perPersonPerDay: Number(env.ASK_DAILY_LIMIT ?? 25),
+    perCommunityPerMonth: Number(env.ASK_MONTHLY_LIMIT ?? 1500),
+  },
 };
 
 if (isProd) {

@@ -397,3 +397,21 @@ table.voucher th { width: 30%; color: var(--ink-2); font-weight: 500; }
   table.grid { font-size: 10pt; }
   .print-stat, .print-head { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Ask Pragathi ---------- */
+.suggest { display: flex; flex-wrap: wrap; gap: 8px; max-width: 760px; }
+.suggest button { text-align: left; font-weight: 500; border-radius: 999px; padding: 8px 14px; background: var(--paper); }
+.chat { display: grid; gap: 18px; max-width: 760px; }
+.turn { display: grid; gap: 8px; }
+.turn .asked { justify-self: end; max-width: 85%; background: var(--brand); color: white; border-radius: 16px 16px 4px 16px; padding: 10px 14px; }
+.turn .asked .small { color: inherit; opacity: 0.8; margin-left: 6px; }
+.answer { background: var(--paper); border: 1px solid var(--line); border-radius: 16px 16px 16px 4px; padding: 12px 16px; max-width: 92%; line-height: 1.6; }
+.answer p + p, .answer p + ul, .answer ul + p { margin-top: 8px; }
+.answer ul { padding-left: 20px; display: grid; gap: 4px; }
+.thinking { font-style: italic; }
+.ask-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; max-width: 760px; scroll-margin-bottom: 96px; }
+.ask-box textarea { resize: vertical; min-height: 52px; }
+button.link { background: none; border: 0; padding: 0; color: var(--brand-ink); text-decoration: underline; font: inherit; cursor: pointer; }
+.ask-home { display: grid; gap: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.ask-home label { font: 700 1.05rem/1.2 var(--display); color: var(--brand-ink); }
+.ask-home > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }

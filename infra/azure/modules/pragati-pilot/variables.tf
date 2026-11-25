@@ -29,3 +29,16 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "anthropic_api_key" {
+  description = "Key for Ask Pragathi (Claude API). Empty leaves Ask Pragathi switched off. Supplied from the ANTHROPIC_API_KEY repository secret."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "ask_model" {
+  description = "Claude model Ask Pragathi uses."
+  type        = string
+  default     = "claude-haiku-5-5"
+}

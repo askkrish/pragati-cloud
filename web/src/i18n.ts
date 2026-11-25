@@ -10,7 +10,7 @@ const ta: Record<string, string> = {
   'Your homes': 'உங்கள் வீடுகள்', Units: 'வீடுகள்', Owners: 'உரிமையாளர்கள்', 'New request': 'புதிய கோரிக்கை',
   Search: 'தேடு', Approved: 'ஒப்புதல் பெற்றது', Pending: 'நிலுவையில்', Rejected: 'நிராகரிக்கப்பட்டது', Withdrawn: 'திரும்பப் பெறப்பட்டது',
   'Use a different number': 'வேறு எண்ணைப் பயன்படுத்து', Language: 'மொழி',
-  Work: 'பணிகள்', Requests: 'கோரிக்கைகள்', Today: 'இன்று', Money: 'கணக்குகள்', Dues: 'நிலுவை', Notices: 'அறிவிப்புகள்',
+  Work: 'பணிகள்', Requests: 'கோரிக்கைகள்', Today: 'இன்று', Money: 'கணக்குகள்', Dues: 'நிலுவை', Notices: 'அறிவிப்புகள்', Ask: 'கேளுங்கள்',
   // Printed packs and statements
   'Weekly committee pack': 'வாராந்திர குழு அறிக்கை', "Owners' monthly update": 'உரிமையாளர்களுக்கான மாதாந்திர அறிக்கை',
   'checks done': 'சோதனைகள் முடிந்தன', 'checks missed': 'தவறிய சோதனைகள்', 'open work orders': 'நிலுவையிலுள்ள பணிகள்', overdue: 'காலம் கடந்தவை',

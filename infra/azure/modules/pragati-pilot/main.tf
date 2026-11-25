@@ -277,6 +277,13 @@ resource "azurerm_container_app" "web" {
     name  = "db-url-app"
     value = local.db_url.web
   }
+  dynamic "secret" {
+    for_each = var.anthropic_api_key == "" ? [] : [1]
+    content {
+      name  = "anthropic-key"
+      value = var.anthropic_api_key
+    }
+  }
 
   ingress {
     external_enabled = true
@@ -317,6 +324,18 @@ resource "azurerm_container_app" "web" {
       env {
         name  = "PRAGATI_TRUST_PROXY_HOPS"
         value = "1"
+      }
+      # Ask Pragathi: on only when a key is supplied.
+      dynamic "env" {
+        for_each = var.anthropic_api_key == "" ? [] : [1]
+        content {
+          name        = "ANTHROPIC_API_KEY"
+          secret_name = "anthropic-key"
+        }
+      }
+      env {
+        name  = "ASK_MODEL"
+        value = var.ask_model
       }
       env {
         name  = "PRAGATI_DB_POOL"

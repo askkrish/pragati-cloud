@@ -22,7 +22,7 @@ import { createStorage, type Storage } from './services/storage.ts';
 export const SESSION_COOKIE = 'pragati_session';
 
 export type Tenant = { id: string; slug: string; brand_name: string; platform_name: string; primary_color: string;
-  logo_file_id: string | null; languages: string[]; assistant_name: string; status: string; is_demo: boolean };
+  logo_file_id: string | null; languages: string[]; assistant_name: string; status: string; is_demo: boolean; assistant_enabled: boolean };
 
 export type Ctx = {
   tx: Tx;

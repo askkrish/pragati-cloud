@@ -13,11 +13,12 @@ import { Activity, MoreMenu, Roles, Rules, SettingsPage } from './pages/Settings
 import { VendorList, VendorView } from './pages/Procurement.tsx';
 import { BankList, BankView, Billing, DuesList, MoneyHome, MoneySettings, MyDues, preparesVouchers, Reports, RunView, seesBooks, UnitStatement, Vouchers,
   VoucherView } from './pages/Money.tsx';
+import { Ask, AskHistory } from './pages/Ask.tsx';
 import { DocumentView, Library, NoticeBoard, NoticeView, Packs, PrintOwners, PrintStatement, PrintVoucher, PrintWeekly } from './pages/Notices.tsx';
 import { AssetList, AssetNew, AssetView, isStaff, Requests, RoutineList, RoutineNew, RoutineView, Today, WorkOrderNew, WorkOrders,
   WorkOrderView } from './pages/Work.tsx';
 
-export type Community = { platformName: string; brandName: string; primaryColor: string; languages: string[]; assistantName: string; hasLogo: boolean; isDemo: boolean };
+export type Community = { platformName: string; brandName: string; primaryColor: string; languages: string[]; assistantName: string; assistantOn: boolean; hasLogo: boolean; isDemo: boolean };
 export type Me = { person: { id: string; name: string; phone: string }; roles: { key: string; name: string; scope: string | null }[];
   permissions: string[]; homes: any[]; committees: any[]; waitingForMyVote: number };
 
@@ -68,6 +69,7 @@ function Frame() {
       : hasHome ? { to: '/dues', label: t('Dues'), icon: Icon.money, match: (p: string) => p.startsWith('/dues') } : null,
     can(me, 'approvals.view') || me.waitingForMyVote ? { to: '/approvals', label: t('Approvals'), icon: Icon.approve, match: (p: string) => p.startsWith('/approvals'),
       badge: me.waitingForMyVote } : null,
+    community.assistantOn ? { to: '/ask', label: t('Ask'), icon: Icon.ask, match: (p: string) => p.startsWith('/ask') } : null,
     can(me, 'property.view') ? { to: '/places', label: t('Places'), icon: Icon.plan, match: (p: string) => p.startsWith('/places') || p.startsWith('/units') } : null,
     can(me, 'people.view') ? { to: '/people', label: t('People'), icon: Icon.people, match: (p: string) => p.startsWith('/people') || p.startsWith('/committees') } : null,
   ].filter(Boolean) as Tab[]).map((tab, i): Tab => ({ ...tab, desktopOnly: i >= 4 }));
@@ -116,6 +118,8 @@ function Frame() {
   else if (path === '/records') page = <Library />;
   else if ((r = m(/^\/records\/([\w-]+)$/))) page = <DocumentView id={r[1]} />;
   else if (path === '/packs') page = <Packs />;
+  else if (path === '/ask') page = <Ask />;
+  else if (path === '/ask/history') page = <AskHistory />;
   else if (path === '/more') page = <MoreMenu />;
   else if (path === '/settings') page = <SettingsPage />;
   else if (path === '/settings/roles') page = <Roles />;

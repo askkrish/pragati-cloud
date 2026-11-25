@@ -30,6 +30,11 @@ provider "azurerm" {
 }
 
 variable "image_tag" { type = string }
+variable "anthropic_api_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
 
 module "pilot" {
   source              = "../../modules/pragati-pilot"
@@ -37,6 +42,8 @@ module "pilot" {
   # South India (Chennai): Central India refused new free-tier PostgreSQL servers (SkuNotAvailable).
   location  = "southindia"
   image_tag = var.image_tag
+  # Ask Pragathi stays off until the ANTHROPIC_API_KEY repository secret is added.
+  anthropic_api_key = var.anthropic_api_key
 }
 
 output "app_url" { value = module.pilot.app_url }

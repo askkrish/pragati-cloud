@@ -23,6 +23,8 @@ env:
   TF_IN_AUTOMATION: "1"
   TF_DIR: infra/azure/envs/pilot
   IMAGE_TAG: ${{ github.sha }}
+  # Empty until the repository secret is added; Ask Pragathi stays off without it.
+  TF_VAR_anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
 jobs:
   test:

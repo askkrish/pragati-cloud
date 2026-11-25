@@ -86,7 +86,7 @@ export async function recordRoutes(app: FastifyInstance, run: Runner, svc: Servi
     'approval_rule_stages', 'approval_requests', 'approval_stages', 'approval_stage_voters', 'approval_votes', 'assets', 'asset_contracts',
     'routines', 'routine_schedules', 'routine_checks', 'work_orders', 'work_updates', 'vendors', 'quotes', 'vendor_selections', 'vendor_reviews',
     'finance_settings', 'ledger_accounts', 'journals', 'journal_lines', 'charge_plans', 'billing_runs', 'billing_run_lines', 'payment_claims',
-    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'notices', 'notice_reads', 'documents', 'files', 'audit_events'];
+    'vouchers', 'bank_statements', 'bank_statement_lines', 'budgets', 'notices', 'notice_reads', 'documents', 'ask_questions', 'files', 'audit_events'];
 
   app.get('/api/export', async (req, reply) => {
     const data = await run.auth(req, async ({ tx, actor, audit, tenant }) => {

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { config } from '../config.ts';
 import type { Runner, Services } from '../app.ts';
 import { clearTenantCache } from '../app.ts';
 import { many, one } from '../db.ts';
@@ -12,7 +13,7 @@ export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Se
   app.get('/api/public/community', async req => {
     const t = req.tenant!;
     return { platformName: t.platform_name, brandName: t.brand_name, primaryColor: t.primary_color,
-      languages: t.languages, assistantName: t.assistant_name, hasLogo: !!t.logo_file_id, isDemo: t.is_demo };
+      languages: t.languages, assistantName: t.assistant_name, assistantOn: !!config.ask.apiKey && t.assistant_enabled, hasLogo: !!t.logo_file_id, isDemo: t.is_demo };
   });
 
   app.get('/api/public/logo', async (req, reply) => {

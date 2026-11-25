@@ -5,6 +5,7 @@ import { KIND_LABEL, Link, Loading, useApi } from '../ui.tsx';
 import { OperationsPanel } from './Work.tsx';
 import { MoneyPanel } from './Money.tsx';
 import { NoticesPanel } from './Notices.tsx';
+import { AskPanel } from './Ask.tsx';
 
 export type TreeNode = { id: string; parent_id: string | null; kind: string; name: string; code: string | null; depth: number;
   sort_order: number; in_scope: boolean; units_here: number; units_total: number };
@@ -61,6 +62,8 @@ export function Home() {
       <h1>{greeting()}, {me.person.name.split(' ')[0]}</h1>
       <p className="quiet">{me.roles.map(r => r.scope ? `${r.name}, ${r.scope}` : r.name).join('; ')}</p>
     </div>
+
+    <AskPanel />
 
     <NoticesPanel />
 

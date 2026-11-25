@@ -8,6 +8,7 @@ import type { TreeNode } from './Home.tsx';
 export function MoreMenu() {
   const { me, community } = useApp();
   const items = [
+    (community.assistantOn || can(me, 'settings.manage')) && { to: '/ask', label: community.assistantName, meta: 'Ask questions about your community in plain words' },
     { to: '/notices', label: t('Notices'), meta: 'From the association, for everyone or your block' },
     { to: '/records', label: 'Records library', meta: 'Bye-laws, minutes, accounts and other documents' },
     { to: '/packs', label: 'Report packs', meta: 'Weekly committee pack and owners\' monthly update, to print or save as PDF' },
