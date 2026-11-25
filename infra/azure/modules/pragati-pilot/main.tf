@@ -466,6 +466,10 @@ resource "azurerm_container_app_job" "seed" {
     name  = "db-url-ops"
     value = local.db_url.ops
   }
+  secret {
+    name  = "app-secret"
+    value = random_password.app_secret.result
+  }
 
   template {
     container {
@@ -489,6 +493,15 @@ resource "azurerm_container_app_job" "seed" {
       env {
         name  = "PRAGATI_DEMO_HOST"
         value = azurerm_container_app.web.ingress[0].fqdn
+      }
+      # The seed shares the app's code, which checks its production settings on start.
+      env {
+        name        = "PRAGATI_SECRET"
+        secret_name = "app-secret"
+      }
+      env {
+        name  = "SMS_PROVIDER"
+        value = "none"
       }
     }
   }
