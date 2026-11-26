@@ -122,13 +122,16 @@ Needs Node 22 and PostgreSQL 16.
 ```sh
 npm install
 npm run db:setup -- postgres://<admin>@localhost:5432/postgres pragati_dev   # roles, database, migrations
-npm run seed                                                                # three sample communities
-npm run build && PRAGATI_DEV_SHOW_OTP=1 npm start
+cp .env.example .env                                                         # then paste the printed DATABASE_URL_* lines
+node --env-file=.env --import tsx seed/samples.ts                            # three sample communities
+npm run build && node --env-file=.env dist/server/main.js
 ```
 
-Open http://maple-court.localhost:8080, http://riverside-greens.localhost:8080 or http://palm-meadows.localhost:8080. Sign in as an administrator with 90000 10001, 90000 20001 or 90000 30001; in development the code is shown on screen. All sample data is invented.
+The app does not read `.env` by itself, so pass `--env-file=.env` (or export the values). Open http://maple-court.localhost:8080, http://riverside-greens.localhost:8080 or http://palm-meadows.localhost:8080. Sign in as an administrator with 90000 10001, 90000 20001 or 90000 30001; with `PRAGATI_DEV_SHOW_OTP=1` the code is shown on screen. All sample data is invented.
 
-`npm test` runs 81 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
+`npm test` runs 106 tests against a fresh database (set `TEST_ADMIN_URL` if your admin login differs).
+
+Taking the project over, or working with Codex: read [AGENTS.md](AGENTS.md) and [docs/HANDOVER.md](docs/HANDOVER.md).
 
 ## Layout
 
