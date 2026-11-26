@@ -10,6 +10,7 @@ import { clearTenantCache, type Runner, type Services } from '../app.ts';
 import { config } from '../config.ts';
 import { many, one } from '../db.ts';
 import { getAs } from '../services/internal.ts';
+import { callClaude } from '../services/ai.ts';
 import { fail } from '../errors.ts';
 import { z } from './z.ts';
 
@@ -104,17 +105,6 @@ How to work:
 
 type Turn = { q: string; a: string };
 
-async function callClaude(body: any) {
-  const res = await fetch(`${config.ask.baseUrl}/v1/messages`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': config.ask.apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
-  });
-  const json: any = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`AI provider: ${res.status} ${json?.error?.type ?? ''}`.trim());
-  return json;
-}
 
 export async function askRoutes(app: FastifyInstance, run: Runner, _svc: Services) {
   // Each lookup is an ordinary request to this API, as the person asking.

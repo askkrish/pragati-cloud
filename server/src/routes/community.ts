@@ -79,7 +79,8 @@ export async function communityRoutes(app: FastifyInstance, run: Runner, svc: Se
       left join app.approval_votes x on x.tenant_id = v.tenant_id and x.request_id = v.request_id and x.stage_no = v.stage_no and x.person_id = v.person_id
       where r.status = 'pending' and v.person_id = $1 and x.vote is null`, [actor.personId]);
     return {
-      person: { id: actor.personId, name: actor.name, phone: actor.phone },
+      person: { id: actor.personId, name: actor.name, phone: actor.phone,
+        photo: (await one(tx, `select photo_file_id from app.people where id = $1`, [actor.personId]))?.photo_file_id ?? null },
       roles: actor.grants.map(g => ({ key: g.roleKey, name: g.roleName, scope: g.scopeName })),
       permissions: actor.permissions(), homes, committees: seats, waitingForMyVote: waiting?.n ?? 0,
     };

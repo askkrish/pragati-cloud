@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, phoneDisplay, shortDate } from '../api.ts';
+import { PhotoPicker } from './Account.tsx';
 import { t } from '../i18n.ts';
 import { can, useApp } from '../main.tsx';
 import { ErrorNote, Initials, Link, Loading, PageHead, POSITION_LABEL, Sheet, useAction, useApi } from '../ui.tsx';
@@ -54,6 +55,10 @@ export function PersonView({ id }: { id: string }) {
   const { person, homes, memberships, seats } = data;
   return <>
     <PageHead title={person.full_name} crumbs={[{ to: '/people', label: t('People') }]} />
+    {can(me, 'people.manage') ? <PhotoPicker name={person.full_name} photo={person.photo_file_id}
+        onSave={async fid => { await api.put(`/api/people/${id}/photo`, { fileId: fid }); reload(); }}
+        onRemove={async () => { await api.put(`/api/people/${id}/photo`, { fileId: null }); reload(); }} />
+      : person.photo_file_id && <Initials name={person.full_name} photo={person.photo_file_id} size={96} />}
     <dl className="facts">
       <div><dt>{t('Mobile number')}</dt><dd>{phoneDisplay(person.phone_e164) || 'Not recorded'}</dd></div>
       {person.email && <div><dt>Email</dt><dd>{person.email}</dd></div>}
@@ -112,7 +117,7 @@ export function Committees() {
       <header><div><h2>{c.name}</h2><p className="quiet">{c.kind === 'apex' || c.kind === 'federation' ? 'Decides for the whole community' : `Looks after ${c.scope}`}</p></div>
         {can(me, 'committees.manage') && <button onClick={() => setAdding(c)}>Add a member</button>}</header>
       <div className="rows">{c.seats.length ? c.seats.map((s: any) => <div key={s.id} className="row">
-        <span className="voter" style={{ border: 0, padding: 0, background: 'none' }}><Initials name={s.full_name} />
+        <span className="voter" style={{ border: 0, padding: 0, background: 'none' }}><Initials name={s.full_name} photo={s.photo_file_id} />
           <span><Link to={`/people/${s.person_id}`}>{s.full_name}</Link><br /><span className="meta">{POSITION_LABEL[s.position]}</span></span></span>
         {can(me, 'committees.manage') && <button className="quiet-btn" onClick={() => act.run(async () => {
           await api.post(`/api/seats/${s.id}/end`, { reason: '' }); reload(); })}>Leaves committee</button>}

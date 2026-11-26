@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { api, ApiError } from './api.ts';
-import { t } from './i18n.ts';
+import { t, useLang } from './i18n.ts';
 
 // ---------- routing ----------
 const routeListeners = new Set<() => void>();
@@ -55,10 +55,45 @@ export function Loading({ what = '' }: { what?: string }) {
 export function ErrorNote({ error }: { error: string | null }) {
   return error ? <p className="note error" role="alert">{error}</p> : null;
 }
-export function Initials({ name }: { name: string }) {
+export function Initials({ name, photo, size }: { name: string; photo?: string | null; size?: number }) {
+  const [broken, setBroken] = useState(false);
   const parts = name.replace(/\(.*\)/, '').trim().split(/\s+/);
-  return <span className="ini" aria-hidden="true">{(parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')}</span>;
+  const style = size ? { width: size, height: size, fontSize: size * 0.4 } : undefined;
+  if (photo && !broken) return <img className="ini photo" src={`/api/files/${photo}`} alt="" style={style} onError={() => setBroken(true)} />;
+  return <span className="ini" aria-hidden="true" style={style}>{(parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')}</span>;
 }
+
+// Speaking instead of typing, in the app's language. The words fill the field for the person to
+// check and change; nothing is sent until they press the usual button. The phone's own speech
+// service (Google on Android, Apple on iPhone) turns the speech into text.
+const SPEECH_LANG: Record<string, string> = { en: 'en-IN', ta: 'ta-IN', hi: 'hi-IN' };
+export function VoiceButton({ onText, label = 'Speak', compact = false }: { onText: (text: string) => void; label?: string; compact?: boolean }) {
+  const lang = useLang();
+  const [on, setOn] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const rec = useRef<any>(null);
+  const Ctor = typeof window !== 'undefined' ? (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition : null;
+  if (!Ctor) return null;
+  const start = () => {
+    setErr(null);
+    const r = new Ctor();
+    r.lang = SPEECH_LANG[lang] ?? 'en-IN'; r.interimResults = false; r.continuous = false; r.maxAlternatives = 1;
+    r.onresult = (e: any) => { const text = Array.from(e.results as ArrayLike<any>).map((x: any) => x[0].transcript).join(' ').trim(); if (text) onText(text); };
+    r.onerror = (e: any) => setErr(e.error === 'not-allowed' ? 'Allow the microphone for this site to speak.' : e.error === 'no-speech' ? 'Nothing was heard. Try again.' : 'Speech could not be understood.');
+    r.onend = () => setOn(false);
+    rec.current = r; setOn(true); r.start();
+  };
+  return <span className="voice">
+    <button type="button" className={`voice-btn ${on ? 'on' : ''}`} onClick={() => on ? rec.current?.stop() : start()} aria-pressed={on}
+      aria-label={on ? 'Stop listening' : `${label} (${lang === 'ta' ? 'தமிழ்' : lang === 'hi' ? 'हिंदी' : 'English'})`} title={on ? 'Listening… tap to stop' : label}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+      {on ? <span>Listening… tap to stop</span> : compact ? null : <span>{label} ({lang === 'ta' ? 'தமிழ்' : lang === 'hi' ? 'हिंदी' : 'English'})</span>}
+    </button>
+    {err && <span className="voice-err" role="status">{err}</span>}
+  </span>;
+}
+// Adds spoken words to what is already typed.
+export const appendSpoken = (current: string, spoken: string) => current.trim() ? `${current.trim()} ${spoken}` : spoken.charAt(0).toUpperCase() + spoken.slice(1);
 export function StatusTag({ status }: { status: string }) {
   const label: Record<string, string> = { pending: t('Pending'), approved: t('Approved'), rejected: t('Rejected'), withdrawn: t('Withdrawn') };
   return <span className={`tag ${status}`}>{label[status] ?? status}</span>;

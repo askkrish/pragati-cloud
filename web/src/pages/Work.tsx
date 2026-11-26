@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, rupees, shortDate } from '../api.ts';
 import { can, useApp, type Me } from '../main.tsx';
-import { ErrorNote, Link, Loading, navigate, PageHead, Sheet, useAction, useApi, usePath } from '../ui.tsx';
+import { appendSpoken, ErrorNote, Link, Loading, navigate, PageHead, Sheet, useAction, useApi, usePath, VoiceButton } from '../ui.tsx';
 import type { TreeNode } from './Home.tsx';
 import { CATEGORY } from './labels.ts';
 import { Quotations, seesProcurement } from './Procurement.tsx';
@@ -93,6 +93,7 @@ export function Today() {
       </div>
     </PageHead>
     <WorkTabs />
+    <p className="quiet small register-link">Checks written in a paper register? <Link to="/work/register">Enter a register page</Link></p>
     {data.place && <p className="note">Checks at {data.place.name} and the places inside it. <Link to={date ? `/work?date=${date}` : '/work'}>Show every place</Link></p>}
     <section className="daybar" aria-label="Progress">
       <div className="daybar-track" role="img" aria-label={`${c.done} of ${c.scheduled} done, ${c.missed} missed`}>
@@ -126,7 +127,7 @@ function CheckSheet({ row, day, today, onClose, onDone }: { row: any; day: strin
   const nowHm = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
   const [status, setStatus] = useState<string>(row.check?.status ?? 'done');
   const [performedAt, setPerformedAt] = useState(row.check?.performed_at ? timeOf(row.check.performed_at) : day === today ? nowHm : (row.start_time ?? ''));
-  const [note, setNote] = useState(row.check?.note ?? '');
+  const [note, setNote] = useState<string>(row.check?.note ?? '');
   const [reading, setReading] = useState(row.check?.reading ? String(Number(row.check.reading)) : '');
   const [reference, setReference] = useState(row.check?.reference ?? '');
   const [file, setFile] = useState<File | null>(null);
@@ -162,6 +163,7 @@ function CheckSheet({ row, day, today, onClose, onDone }: { row: any; day: strin
         <input inputMode="decimal" value={reading} onChange={e => setReading(e.target.value)} required /></label>}
       {status === 'done' && n.reference && <label className="field">Reference number<input value={reference} onChange={e => setReference(e.target.value)} /></label>}
       <label className="field">{noteLabel}<textarea value={note} onChange={e => setNote(e.target.value)} /></label>
+      <VoiceButton label="Speak the remarks" onText={x => setNote(n => appendSpoken(n, x))} />
       {(status === 'done' || status === 'blocked') && <label className="field">Photo{n.photo && status === 'done' ? ' (needed)' : ' (optional)'}
         <input type="file" accept="image/*" capture="environment" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>}
       {status === 'blocked' && !row.check?.work_order_id && <label className="check"><input type="checkbox" checked={raise} onChange={e => setRaise(e.target.checked)} />
@@ -269,6 +271,7 @@ function MoveForm({ move, busy, error, onSave }: { move: any; busy: boolean; err
   const label = move.to === 'done' ? 'What was done' : move.to === 'on_hold' ? 'What it is waiting for' : move.needsNote ? 'Reason' : 'Note (optional)';
   return <>
     <label className="field">{label}<textarea value={note} onChange={e => setNote(e.target.value)} /></label>
+    <VoiceButton onText={x => setNote(n => appendSpoken(n, x))} />
     <ErrorNote error={error} />
     <button className="primary" disabled={busy || (move.needsNote && !note.trim())} onClick={() => onSave(note)}>{move.label}</button>
   </>;
@@ -286,6 +289,7 @@ function NoteForm({ id, staff, onDone }: { id: string; staff: boolean; onDone: (
     setBody(''); setFile(null); setStaffOnly(false); setKey(k => k + 1); onDone();
   }); }}>
     <label className="field">Add an update<textarea value={body} onChange={e => setBody(e.target.value)} placeholder="What happened, what is needed next" /></label>
+    <VoiceButton label="Speak the update" onText={x => setBody(b => appendSpoken(b, x))} />
     <div className="two">
       <label className="field">Photo (optional)<input key={key} type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
       {staff && <label className="check" style={{ alignSelf: 'end' }}><input type="checkbox" checked={staffOnly} onChange={e => setStaffOnly(e.target.checked)} />
@@ -397,6 +401,8 @@ export function Requests() {
         placeholder="For example, water leaking from the bathroom ceiling" /></label>
       <label className="field">More details (optional)<textarea value={f.details} onChange={e => setF({ ...f, details: e.target.value })}
         placeholder="When it started, the best time to visit" /></label>
+      <VoiceButton label="Speak the problem" onText={x => setF(v => v.title.trim() ? { ...v, details: appendSpoken(v.details, x) }
+        : { ...v, title: appendSpoken('', x).slice(0, 120), details: x.length > 120 ? appendSpoken(v.details, x) : v.details })} />
       <label className="field">Photo (optional)<input key={key} type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
       <label className="field">Does this need the committee's permission?<select value={f.permitKind} onChange={e => setF({ ...f, permitKind: e.target.value })}>
         <option value="">No: it is a problem to fix</option>{Object.entries(PERMIT_KINDS).map(([k, v]) => <option key={k} value={k}>Yes: {v.toLowerCase()}</option>)}</select></label>

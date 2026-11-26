@@ -120,7 +120,7 @@ export function ApprovalView({ id }: { id: string }) {
             {s.status !== 'waiting' && s.required && <div className="progress"><i style={{ width: `${Math.min(100, (s.approvals / s.required) * 100)}%` }} /></div>}
             {s.voters.length > 0 && <div className="voters">{s.voters.map((v: any) => <span key={v.personId}
               className={`voter ${v.vote ?? ''} ${v.active ? '' : 'inactive'}`} title={v.active ? '' : 'No longer on the committee'}>
-              <Initials name={v.name} />{v.name}<span className="faint">{v.vote === 'approve' ? 'approved' : v.vote === 'object' ? 'objected' : 'waiting'}</span></span>)}</div>}
+              <Initials name={v.name} photo={v.photo} />{v.name}<span className="faint">{v.vote === 'approve' ? 'approved' : v.vote === 'object' ? 'objected' : 'waiting'}</span></span>)}</div>}
             {s.voters.filter((v: any) => v.vote === 'object').map((v: any) => <p key={v.personId} className="objection">{v.name}: {v.note}</p>)}
           </div>
         </div>)}

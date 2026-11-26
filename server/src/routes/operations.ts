@@ -1,7 +1,7 @@
 // Routines and the daily checklist.
 import type { FastifyInstance } from 'fastify';
 import type { Actor } from '../actor.ts';
-import type { Runner, Services } from '../app.ts';
+import type { Ctx, Runner, Services } from '../app.ts';
 import { many, one, type Tx } from '../db.ts';
 import { fail, forbidden, notFound } from '../errors.ts';
 import { IN_SCOPE, isStaff, manages, myHomes, nodeRef, personExists, routineDays, scheduleSummary, seeScopes,
@@ -70,6 +70,86 @@ const canRecord = (actor: Actor, r: any) => {
   return manages(actor, node) || r.assignee_person_id === actor.personId || r.backup_person_id === actor.personId
     || actor.can('operations.update', node);
 };
+
+// Recording one check, used by the check sheet and by a scanned register: the same rules apply.
+export const CHECK_INPUT = z.object({
+  status: z.enum(['done', 'skipped', 'blocked', 'in_progress']),
+  performedAt: time.nullable().optional(),
+  note: z.string().trim().max(2400).default(''),
+  reading: z.union([z.number(), z.string()]).nullable().optional(),
+  reference: z.string().trim().max(120).nullable().optional().transform(v => v || null),
+  photoFileId: uuid.nullable().optional(),
+  raiseWorkOrder: z.boolean().default(false),
+});
+export async function recordCheck(tx: Tx, actor: Actor, audit: Ctx['audit'], id: string, day: string, b: z.infer<typeof CHECK_INPUT>,
+  opts: { fromRegister?: boolean } = {}) {
+    const r = await loadRoutine(tx, actor, id);
+    if (r.archived_at) fail(409, 'This routine has been stopped.', 'closed');
+    if (!canRecord(actor, r)) forbidden();
+    const now = await communityNow(tx);
+    const node = { id: r.node_id, ancestor_ids: r.ancestor_ids };
+    if (day > now.day) fail(400, 'You can record a check on its day or afterwards, not before.', 'invalid');
+    const back = daysBetween(day, now.day);
+    if (back > (manages(actor, node) ? 400 : 30)) fail(400, 'That day is too far back to record. Ask the facility manager.', 'invalid');
+
+    const versions = (await many(tx, `select * from app.routine_schedules where routine_id = $1`, [id])).map(normalise);
+    const s = versionOn(versions, day);
+    const previous = await one(tx, `select * from app.routine_checks where routine_id = $1 and occurrence_on = $2`, [id, day]);
+    if (!s || (!previous && !occursOn(s, day))) fail(400, 'This routine is not scheduled on that day.', 'invalid');
+
+    if (['skipped', 'blocked'].includes(b.status) && !b.note) fail(400, b.status === 'skipped' ? 'Give the reason for skipping.' : 'Say what is blocking the work.', 'invalid');
+    let performedAt: Date | null = null, late = false;
+    let reading: string | null = previous?.reading ?? null;
+    if (b.reading !== undefined && b.reading !== null && String(b.reading).trim() !== '') {
+      const v = String(b.reading).trim();
+      if (!/^-?\d{1,12}(\.\d{1,6})?$/.test(v)) fail(400, 'Enter the reading as a number.', 'invalid');
+      reading = v;
+    }
+    const reference = b.reference ?? previous?.reference ?? null;
+    let photo = previous?.photo_file_id ?? null;
+    if (b.photoFileId) {
+      // A scanned register page stands as the evidence for the entries read from it.
+      const f = await one(tx, `select id from app.files where id = $1 and purpose = any ($3::text[]) and uploaded_by = $2`,
+        [b.photoFileId, actor.personId, opts.fromRegister ? ['work_photo', 'evidence'] : ['work_photo']]);
+      if (!f) fail(400, 'Upload the photo again.', 'invalid');
+      photo = b.photoFileId;
+    }
+    if (b.status === 'done' && s) {
+      const minute = b.performedAt ?? (day === now.day ? now.minute : null);
+      if (!minute) fail(400, 'Enter the time the work was done.', 'invalid');
+      if (day === now.day && minute! > now.minute) fail(400, 'The time the work was done cannot be later than now.', 'invalid');
+      performedAt = zonedInstant(day, minute!, now.tz);
+      late = isLate(s, day, { day, minute: minute! });
+      if (s.remarks === 'required' && !b.note && !previous?.note) fail(400, 'Add the completion remarks this routine asks for.', 'invalid');
+      if (s.reading_label && reading === null) fail(400, `Enter the ${s.reading_label.toLowerCase()} reading.`, 'invalid');
+      if (s.reference_required && !reference) fail(400, 'Enter the reference number this routine asks for.', 'invalid');
+      if (s.photo_required && !photo) fail(400, 'Attach the photo this routine asks for.', 'invalid');
+    }
+
+    let workOrderId = previous?.work_order_id ?? null;
+    if (b.raiseWorkOrder && b.status === 'blocked' && !workOrderId) {
+      const ref = (await one(tx, `select app.next_ref('work', 'WO') as ref`))!.ref;
+      const wo = await one(tx, `insert into app.work_orders (ref, kind, title, details, category, priority, node_id, asset_id, routine_id, occurrence_on, raised_by)
+        values ($1, 'maintenance', $2, $3, $4, 'high', $5, $6, $7, $8, $9) returning id`,
+        [ref, `${r.title}: could not be done`.slice(0, 200), b.note, r.category, r.node_id, r.asset_id, id, day, actor.personId]);
+      await tx.query(`insert into app.work_updates (work_order_id, person_id, kind, body, to_status) values ($1, $2, 'created', $3, 'open')`,
+        [wo!.id, actor.personId, `Raised from ${r.ref} on ${day}`]);
+      workOrderId = wo!.id;
+      await audit('work.created', 'work_order', wo!.id, `${ref} raised from a blocked check of ${r.ref}`);
+    }
+
+    const note = b.note || (previous && b.status === previous.status ? previous.note : '');
+    await tx.query(`insert into app.routine_checks (routine_id, occurrence_on, status, performed_at, note, reading, reference, photo_file_id, late, work_order_id, recorded_by)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      on conflict (tenant_id, routine_id, occurrence_on) do update set status = excluded.status, performed_at = excluded.performed_at,
+        note = excluded.note, reading = excluded.reading, reference = excluded.reference, photo_file_id = excluded.photo_file_id,
+        late = excluded.late, work_order_id = excluded.work_order_id, recorded_by = excluded.recorded_by, recorded_at = now()`,
+      [id, day, b.status, performedAt, note, reading, reference, photo, late, workOrderId, actor.personId]);
+    const label = { done: late ? 'done late' : 'done', skipped: 'skipped', blocked: 'blocked', in_progress: 'started' }[b.status];
+    await audit('routine.checked', 'routine', id, `${r.ref} on ${day}: ${label}${opts.fromRegister ? ' (from a scanned register)' : ''}`,
+      { day, status: b.status, late, previous: previous ? { status: previous.status, note: previous.note } : null });
+    return { ok: true, late, workOrderId };
+}
 
 export async function operationsRoutes(app: FastifyInstance, run: Runner, _svc: Services) {
   // The checklist for one day: every routine due that day, with its status.
@@ -182,79 +262,7 @@ export async function operationsRoutes(app: FastifyInstance, run: Runner, _svc: 
   // Record what happened on one scheduled day.
   app.put('/api/routines/:id/checks/:day', async req => run.auth(req, async ({ tx, actor, audit }) => {
     const { id, day } = z.object({ id: uuid, day: date }).parse(req.params);
-    const b = z.object({
-      status: z.enum(['done', 'skipped', 'blocked', 'in_progress']),
-      performedAt: time.nullable().optional(),
-      note: z.string().trim().max(2400).default(''),
-      reading: z.union([z.number(), z.string()]).nullable().optional(),
-      reference: z.string().trim().max(120).nullable().optional().transform(v => v || null),
-      photoFileId: uuid.nullable().optional(),
-      raiseWorkOrder: z.boolean().default(false),
-    }).parse(req.body);
-    const r = await loadRoutine(tx, actor, id);
-    if (r.archived_at) fail(409, 'This routine has been stopped.', 'closed');
-    if (!canRecord(actor, r)) forbidden();
-    const now = await communityNow(tx);
-    const node = { id: r.node_id, ancestor_ids: r.ancestor_ids };
-    if (day > now.day) fail(400, 'You can record a check on its day or afterwards, not before.', 'invalid');
-    const back = daysBetween(day, now.day);
-    if (back > (manages(actor, node) ? 400 : 30)) fail(400, 'That day is too far back to record. Ask the facility manager.', 'invalid');
-
-    const versions = (await many(tx, `select * from app.routine_schedules where routine_id = $1`, [id])).map(normalise);
-    const s = versionOn(versions, day);
-    const previous = await one(tx, `select * from app.routine_checks where routine_id = $1 and occurrence_on = $2`, [id, day]);
-    if (!s || (!previous && !occursOn(s, day))) fail(400, 'This routine is not scheduled on that day.', 'invalid');
-
-    if (['skipped', 'blocked'].includes(b.status) && !b.note) fail(400, b.status === 'skipped' ? 'Give the reason for skipping.' : 'Say what is blocking the work.', 'invalid');
-    let performedAt: Date | null = null, late = false;
-    let reading: string | null = previous?.reading ?? null;
-    if (b.reading !== undefined && b.reading !== null && String(b.reading).trim() !== '') {
-      const v = String(b.reading).trim();
-      if (!/^-?\d{1,12}(\.\d{1,6})?$/.test(v)) fail(400, 'Enter the reading as a number.', 'invalid');
-      reading = v;
-    }
-    const reference = b.reference ?? previous?.reference ?? null;
-    let photo = previous?.photo_file_id ?? null;
-    if (b.photoFileId) {
-      const f = await one(tx, `select id from app.files where id = $1 and purpose = 'work_photo' and uploaded_by = $2`, [b.photoFileId, actor.personId]);
-      if (!f) fail(400, 'Upload the photo again.', 'invalid');
-      photo = b.photoFileId;
-    }
-    if (b.status === 'done' && s) {
-      const minute = b.performedAt ?? (day === now.day ? now.minute : null);
-      if (!minute) fail(400, 'Enter the time the work was done.', 'invalid');
-      if (day === now.day && minute! > now.minute) fail(400, 'The time the work was done cannot be later than now.', 'invalid');
-      performedAt = zonedInstant(day, minute!, now.tz);
-      late = isLate(s, day, { day, minute: minute! });
-      if (s.remarks === 'required' && !b.note && !previous?.note) fail(400, 'Add the completion remarks this routine asks for.', 'invalid');
-      if (s.reading_label && reading === null) fail(400, `Enter the ${s.reading_label.toLowerCase()} reading.`, 'invalid');
-      if (s.reference_required && !reference) fail(400, 'Enter the reference number this routine asks for.', 'invalid');
-      if (s.photo_required && !photo) fail(400, 'Attach the photo this routine asks for.', 'invalid');
-    }
-
-    let workOrderId = previous?.work_order_id ?? null;
-    if (b.raiseWorkOrder && b.status === 'blocked' && !workOrderId) {
-      const ref = (await one(tx, `select app.next_ref('work', 'WO') as ref`))!.ref;
-      const wo = await one(tx, `insert into app.work_orders (ref, kind, title, details, category, priority, node_id, asset_id, routine_id, occurrence_on, raised_by)
-        values ($1, 'maintenance', $2, $3, $4, 'high', $5, $6, $7, $8, $9) returning id`,
-        [ref, `${r.title}: could not be done`.slice(0, 200), b.note, r.category, r.node_id, r.asset_id, id, day, actor.personId]);
-      await tx.query(`insert into app.work_updates (work_order_id, person_id, kind, body, to_status) values ($1, $2, 'created', $3, 'open')`,
-        [wo!.id, actor.personId, `Raised from ${r.ref} on ${day}`]);
-      workOrderId = wo!.id;
-      await audit('work.created', 'work_order', wo!.id, `${ref} raised from a blocked check of ${r.ref}`);
-    }
-
-    const note = b.note || (previous && b.status === previous.status ? previous.note : '');
-    await tx.query(`insert into app.routine_checks (routine_id, occurrence_on, status, performed_at, note, reading, reference, photo_file_id, late, work_order_id, recorded_by)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      on conflict (tenant_id, routine_id, occurrence_on) do update set status = excluded.status, performed_at = excluded.performed_at,
-        note = excluded.note, reading = excluded.reading, reference = excluded.reference, photo_file_id = excluded.photo_file_id,
-        late = excluded.late, work_order_id = excluded.work_order_id, recorded_by = excluded.recorded_by, recorded_at = now()`,
-      [id, day, b.status, performedAt, note, reading, reference, photo, late, workOrderId, actor.personId]);
-    const label = { done: late ? 'done late' : 'done', skipped: 'skipped', blocked: 'blocked', in_progress: 'started' }[b.status];
-    await audit('routine.checked', 'routine', id, `${r.ref} on ${day}: ${label}`,
-      { day, status: b.status, late, previous: previous ? { status: previous.status, note: previous.note } : null });
-    return { ok: true, late, workOrderId };
+    return recordCheck(tx, actor, audit, id, day, CHECK_INPUT.parse(req.body));
   }));
 
   // What the home page shows about operations.

@@ -9,6 +9,7 @@ export function MoreMenu() {
   const { me, community } = useApp();
   const items = [
     (community.assistantOn || can(me, 'settings.manage')) && { to: '/ask', label: community.assistantName, meta: 'Ask questions about your community in plain words' },
+    { to: '/account', label: 'Your account', meta: 'Your photo, language and home screen' },
     { to: '/search', label: 'Search', meta: 'Find a request, a home, a person, a vendor or a reference' },
     { to: '/notices', label: t('Notices'), meta: 'From the association, for everyone or your block' },
     { to: '/records', label: 'Records library', meta: 'Bye-laws, minutes, accounts and other documents' },

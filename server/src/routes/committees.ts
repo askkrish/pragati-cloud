@@ -14,7 +14,7 @@ export async function committeeRoutes(app: FastifyInstance, run: Runner, _svc: S
     const committees = await many(tx, `select c.id, c.name, c.kind, c.scope_node_id, n.name as scope, c.parent_committee_id
       from app.committees c join app.property_nodes n on n.tenant_id = c.tenant_id and n.id = c.scope_node_id
       where c.archived_at is null order by n.depth, c.kind, c.name`);
-    const seats = await many(tx, `select s.id, s.committee_id, s.position, s.starts_on, p.id as person_id, p.full_name
+    const seats = await many(tx, `select s.id, s.committee_id, s.position, s.starts_on, p.id as person_id, p.full_name, p.photo_file_id
       from app.committee_seats s join app.people p on p.tenant_id = s.tenant_id and p.id = s.person_id
       where s.ends_on is null order by array_position(array['president','vice_president','secretary','joint_secretary','treasurer','member'], s.position), p.full_name`);
     return committees.map(c => ({ ...c, seats: seats.filter(s => s.committee_id === c.id) }));

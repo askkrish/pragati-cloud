@@ -30,7 +30,7 @@ export async function peopleRoutes(app: FastifyInstance, run: Runner, _svc: Serv
     actor.require('people.view', null);
     const q = z.object({ q: z.string().max(60).optional(), limit: z.coerce.number().int().min(1).max(500).default(100),
       offset: z.coerce.number().int().min(0).default(0) }).parse(req.query);
-    const rows = await many(tx, `select p.id, p.full_name, p.phone_e164, p.email, p.user_id is not null as has_signed_in,
+    const rows = await many(tx, `select p.id, p.full_name, p.phone_e164, p.email, p.photo_file_id, p.user_id is not null as has_signed_in,
         (select string_agg(distinct u.label, ', ') from app.ownerships o join app.units u on u.tenant_id = o.tenant_id and u.id = o.unit_id
           where o.person_id = p.id and o.ends_on is null) as owns,
         (select string_agg(distinct r.name, ', ') from app.memberships m join app.roles r on r.tenant_id = m.tenant_id and r.id = m.role_id
@@ -46,7 +46,7 @@ export async function peopleRoutes(app: FastifyInstance, run: Runner, _svc: Serv
   app.get('/api/people/:id', async req => run.auth(req, async ({ tx, actor }) => {
     const { id } = idParam.parse(req.params);
     if (id !== actor.personId) actor.require('people.view', null);
-    const person = await one(tx, `select id, full_name, phone_e164, email, language, user_id is not null as has_signed_in, created_at
+    const person = await one(tx, `select id, full_name, phone_e164, email, language, photo_file_id, user_id is not null as has_signed_in, created_at
       from app.people where id = $1 and archived_at is null`, [id]) ?? notFound('That person');
     const homes = await many(tx, `select o.id, u.id as unit_id, u.label, o.share_pct, o.starts_on, o.ends_on, 'owner' as relation
         from app.ownerships o join app.units u on u.tenant_id = o.tenant_id and u.id = o.unit_id where o.person_id = $1
@@ -193,4 +193,34 @@ export async function peopleRoutes(app: FastifyInstance, run: Runner, _svc: Serv
       return { ok: true };
     }));
   }
+
+  // Profile photos: people add or change their own; those who manage people can change or remove one.
+  async function setPhoto(tx: any, actor: any, audit: any, personId: string, fileId: string | null) {
+    if (fileId && !await one(tx, `select 1 from app.files where id = $1 and purpose = 'avatar' and uploaded_by = $2`, [fileId, actor.personId]))
+      fail(400, 'Upload the photo again.', 'invalid');
+    const p = await one(tx, `update app.people set photo_file_id = $2 where id = $1 and archived_at is null returning full_name`, [personId, fileId]) ?? notFound('That person');
+    await audit(fileId ? 'person.photo_set' : 'person.photo_removed', 'person', personId, `${fileId ? 'Photo added for' : 'Photo removed for'} ${p.full_name}`);
+    return { ok: true, photo: fileId };
+  }
+  app.put('/api/me/photo', async req => run.auth(req, async ({ tx, actor, audit }) =>
+    setPhoto(tx, actor, audit, actor.personId, z.object({ fileId: uuid.nullable() }).parse(req.body).fileId)));
+  app.put('/api/people/:id/photo', async req => run.auth(req, async ({ tx, actor, audit }) => {
+    actor.require('people.manage', null);
+    return setPhoto(tx, actor, audit, idParam.parse(req.params).id, z.object({ fileId: uuid.nullable() }).parse(req.body).fileId);
+  }));
+
+  // Each person's own settings, kept with their account so they follow them to any phone.
+  const PANEL = z.object({ id: z.string().regex(/^[a-z_]{2,30}$/), hidden: z.boolean().default(false) });
+  app.get('/api/me/settings', async req => run.auth(req, async ({ tx, actor }) => {
+    const s = await one(tx, `select home_layout from app.person_settings where person_id = $1`, [actor.personId]);
+    return { homeLayout: s?.home_layout ?? [] };
+  }));
+  app.put('/api/me/settings', async req => run.auth(req, async ({ tx, actor }) => {
+    const b = z.object({ homeLayout: z.array(PANEL).max(30) }).parse(req.body);
+    const ids = b.homeLayout.map(x => x.id);
+    if (new Set(ids).size !== ids.length) fail(400, 'Each panel can appear once.', 'invalid');
+    await tx.query(`insert into app.person_settings (person_id, home_layout) values ($1, $2)
+      on conflict (tenant_id, person_id) do update set home_layout = excluded.home_layout, updated_at = now()`, [actor.personId, JSON.stringify(b.homeLayout)]);
+    return { homeLayout: b.homeLayout };
+  }));
 }

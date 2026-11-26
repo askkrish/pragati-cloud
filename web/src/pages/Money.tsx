@@ -1,5 +1,6 @@
 // Finance: the treasurer's books, owners' dues, billing, vouchers, the bank and reports.
 import { useEffect, useState } from 'react';
+import { ReadButton, ReadNote } from './Reading.tsx';
 import { api, rupees, shortDate } from '../api.ts';
 import { can, useApp, type Me } from '../main.tsx';
 import { ErrorNote, Link, Loading, navigate, PageHead, Sheet, useAction, useApi, usePath } from '../ui.tsx';
@@ -561,15 +562,30 @@ function VoucherForm({ onDone }: { onDone: (id: string) => void }) {
   const qs = new URLSearchParams(location.search);
   const [f, setF] = useState({ vendorId: '', payee: '', description: '', amount: '', tds: '', accountId: '', nodeId: '', workOrderId: qs.get('work') ?? '', invoiceNo: '', invoiceDate: '' });
   const [file, setFile] = useState<File | null>(null);
+  const [readId, setReadId] = useState<string | null>(null);
+  const [read, setRead] = useState<any>(null);
   const { busy, error, run } = useAction();
   useEffect(() => { if (!f.nodeId && tree.data) setF(x => ({ ...x, nodeId: tree.data!.nodes.find(n => n.parent_id === null)?.id ?? '' })); }, [tree.data]);
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.value });
   const places = (tree.data?.nodes ?? []).filter(n => n.in_scope && n.kind !== 'floor');
+  const fill = (r: any, id: string) => {
+    const name = (r.vendorName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const match = name ? (vendors.data ?? []).find(v => v.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === name) : null;
+    setF(v => ({ ...v, vendorId: match?.id ?? '', payee: match ? '' : r.vendorName ?? v.payee, description: r.description ?? v.description,
+      amount: r.total != null ? String(r.total) : v.amount, invoiceNo: r.invoiceNo ?? v.invoiceNo, invoiceDate: r.invoiceDate ?? v.invoiceDate }));
+    setRead(r); setReadId(id);
+  };
   return <form className="form" onSubmit={e => { e.preventDefault(); run(async () => {
-    const fileId = file ? (await api.upload('/api/files?purpose=invoice', file)).id : null;
+    const fileId = readId ?? (file ? (await api.upload('/api/files?purpose=invoice', file)).id : null);
     const r = await api.post('/api/finance/vouchers', { ...f, vendorId: f.vendorId || null, payee: f.payee || undefined, tds: f.tds || null, workOrderId: f.workOrderId || null,
       invoiceNo: f.invoiceNo || null, invoiceDate: f.invoiceDate || null, fileId });
+    // A GSTIN read from the invoice is recorded for the treasurer to verify.
+    if (read?.vendorGstin) await api.post(`/api/finance/vouchers/${r.id}/gst`, { status: 'pending', gstin: read.vendorGstin, invoiceNo: f.invoiceNo || null,
+      note: read.gst ? `Read from the invoice: GST ₹${read.gst}` : 'Read from the invoice' }).catch(() => null);
     onDone(r.id); }); }}>
+    <label className="field">Invoice (PDF or photo)<input type="file" accept=".pdf,image/*" onChange={e => { setFile(e.target.files?.[0] ?? null); setReadId(null); setRead(null); }} /></label>
+    <ReadButton kind="invoice" file={file} onRead={fill} />
+    <ReadNote fields={read} />
     <div className="two">
       <label className="field">Pay to<select value={f.vendorId} onChange={set('vendorId')}><option value="">Someone not in the vendor list</option>
         {(vendors.data ?? []).filter(v => v.status !== 'blocked').map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>
@@ -585,7 +601,6 @@ function VoucherForm({ onDone }: { onDone: (id: string) => void }) {
       <label className="field">Invoice number<input value={f.invoiceNo} onChange={set('invoiceNo')} /></label>
       <label className="field">Invoice date<input type="date" value={f.invoiceDate} onChange={set('invoiceDate')} /></label>
     </div>
-    <label className="field">Invoice (PDF or photo)<input type="file" accept=".pdf,image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
     <ErrorNote error={error} />
     <div className="actions"><button className="primary" disabled={busy}>Send for approval</button></div>
   </form>;

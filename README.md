@@ -92,6 +92,17 @@ Full books for each community, as agreed in the commercial plan, with export to 
 | Ask Pragathi | References in answers open the record; copy and rate each answer; it drafts a service request for the asker's home, which they check and send themselves. Monthly usage and ratings for the committee. |
 | Help and feedback | A short guide for each kind of person and a message form to the platform team. |
 
+## Phase 2, module 8: reading documents, voice, photos and home screens
+
+| Area | What works |
+| --- | --- |
+| Reading documents | With the assistant switched on, a quotation or invoice (PDF or photo) fills in its form: vendor, GSTIN, amounts, GST, scope, dates and terms. A GSTIN read from an invoice is recorded for the treasurer to verify. Values are checked before they reach the form (dates, amounts, GSTIN format), anything unclear is listed, and nothing is saved until the person saves the form. |
+| Paper registers | A photo or scan of a register page is read into rows (or typed in), each matched to a routine for the person to confirm, then recorded as checks under exactly the same rules as the check sheet, all together or not at all. The scan is kept as the evidence for each entry, and the same page cannot be entered twice. |
+| Voice | A microphone button on requests, check remarks, work updates, drafted requests and Ask Pragathi listens in the app's language (Tamil, English or Hindi) and fills the text for the person to check. The phone's own speech service turns speech into text. |
+| Profile photos | People add their own photo, made small and square on the phone (which also drops the location stored in camera pictures). Photos show where names do; those who manage people can change or remove one. A removed photo is no longer shown to others. |
+| Home screen | Each person orders and hides the panels on their home screen; the arrangement is kept with their account, so it follows them to any phone. |
+| Limits and cost | Document reads count toward the community's monthly assistant limit, with 40 reads per person per day (`READ_DAILY_LIMIT`); each read is logged with its token counts. `READ_MODEL` can choose a different model for reading. |
+
 ## Phase 2, module 5: Ask Pragathi
 
 Questions in plain words, in English or Tamil, answered by Claude from the community's own records.

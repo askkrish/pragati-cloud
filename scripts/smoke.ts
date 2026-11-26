@@ -62,6 +62,10 @@ await check('Asset service log', async () => {
 await check('Handovers waiting', async () => list(await call('GET', '/api/handovers/mine')));
 await check('Notice templates', async () => list(await call('GET', '/api/notice-templates')));
 await check('Assistant status', async () => { const r = await call('GET', '/api/ask/status'); return r.status === 200 ? true : `HTTP ${r.status}`; });
+await check('Document reading status', async () => ok(await call('GET', '/api/read/status')));
+await check('Paper registers', async () => ok(await call('GET', '/api/register-imports')));
+await check('Home screen settings', async () => { const r = await call('GET', '/api/me/settings'); return r.status === 200 && Array.isArray(r.json.homeLayout) ? true : `HTTP ${r.status}`; });
+await check('Profile photo field', async () => { const r = await call('GET', '/api/me'); return r.status === 200 && 'photo' in r.json.person ? true : 'missing'; });
 await check('App manifest', async () => { const r = await call('GET', '/manifest.webmanifest'); return r.status === 200 && r.json?.name ? true : `HTTP ${r.status}`; });
 await check('Service worker', async () => { const r = await call('GET', '/sw.js'); return r.status === 200 && /pragati-shell/.test(r.text) ? true : `HTTP ${r.status}`; });
 await check('Signed out cannot read', async () => { const c = cookie; cookie = ''; const r = await call('GET', '/api/me'); cookie = c; return r.status === 401 ? true : `HTTP ${r.status}`; });

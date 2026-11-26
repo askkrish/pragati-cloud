@@ -4,6 +4,7 @@ import { api, phoneDisplay, rupees, shortDate } from '../api.ts';
 import { can, useApp, type Me } from '../main.tsx';
 import { ErrorNote, Link, Loading, navigate, PageHead, Sheet, useAction, useApi } from '../ui.tsx';
 import { CATEGORY } from './labels.ts';
+import { ReadButton, ReadNote } from './Reading.tsx';
 import { WorkTabs } from './Work.tsx';
 
 export const seesProcurement = (me: Me) => can(me, 'procurement.view') || can(me, 'procurement.manage');
@@ -82,17 +83,32 @@ function QuoteForm({ workId, revise, onDone }: { workId: string; revise: any; on
     exclusions: revise?.exclusions ?? '', timeline: revise?.timeline ?? '', warranty: revise?.warranty ?? '', validUntil: '', paymentTerms: revise?.payment_terms ?? '',
     reference: '', receivedOn: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) });
   const [file, setFile] = useState<File | null>(null);
+  const [readId, setReadId] = useState<string | null>(null);
+  const [read, setRead] = useState<any>(null);
   const { busy, error, run } = useAction();
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.value });
   const isNew = f.vendorId === 'new';
+  // Fields read from the document go into the form; the vendor is matched by name, or entered as new.
+  const fill = (r: any, id: string) => {
+    const name = (r.vendorName ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const match = name ? (vendors.data ?? []).find(v => v.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === name) : null;
+    setF(v => ({ ...v, ...(revise ? {} : match ? { vendorId: match.id } : r.vendorName ? { vendorId: 'new', newName: r.vendorName } : {}),
+      amount: r.amount != null ? String(r.amount) : v.amount, tax: r.tax ?? v.tax, gst: r.gst != null ? String(r.gst) : v.gst, scope: r.scope ?? v.scope,
+      exclusions: r.exclusions ?? v.exclusions, timeline: r.timeline ?? v.timeline, warranty: r.warranty ?? v.warranty, validUntil: r.validUntil ?? v.validUntil,
+      paymentTerms: r.paymentTerms ?? v.paymentTerms, receivedOn: r.quoteDate ?? v.receivedOn }));
+    setRead(r); setReadId(id);
+  };
   return <form className="form" onSubmit={e => { e.preventDefault(); run(async () => {
-    const fileId = file ? (await api.upload('/api/files?purpose=quotation', file)).id : null;
+    const fileId = readId ?? (file ? (await api.upload('/api/files?purpose=quotation', file)).id : null);
     await api.post(`/api/work/${workId}/quotes`, { ...(isNew ? { newVendor: { name: f.newName, phone: f.newPhone || null } } : { vendorId: f.vendorId }),
       amount: f.amount, tax: f.tax, gst: f.tax === 'excluded' ? f.gst || null : null, scope: f.scope, exclusions: f.exclusions, timeline: f.timeline,
       warranty: f.warranty, validUntil: f.validUntil || null, paymentTerms: f.paymentTerms, reference: f.reference || null, receivedOn: f.receivedOn, fileId,
       replacesId: revise?.id ?? null });
     onDone();
   }); }}>
+    <label className="field">The quotation (PDF or photo)<input type="file" accept=".pdf,image/*" onChange={e => { setFile(e.target.files?.[0] ?? null); setReadId(null); setRead(null); }} /></label>
+    <ReadButton kind="quotation" file={file} onRead={fill} />
+    <ReadNote fields={read} />
     {!revise && <label className="field">Vendor<select required value={f.vendorId} onChange={set('vendorId')}>
       <option value="">Choose…</option>{(vendors.data ?? []).filter(v => v.status !== 'blocked').map(v => <option key={v.id} value={v.id}>{v.name}{v.city ? `, ${v.city}` : ''}</option>)}
       <option value="new">A new vendor…</option></select></label>}
@@ -113,10 +129,7 @@ function QuoteForm({ workId, revise, onDone }: { workId: string; revise: any; on
       <label className="field">Received on<input type="date" value={f.receivedOn} onChange={set('receivedOn')} /></label>
     </div>
     <label className="field">Payment terms<input value={f.paymentTerms} onChange={set('paymentTerms')} placeholder="30% advance, balance on completion" /></label>
-    <div className="two">
-      <label className="field">Quotation number<input value={f.reference} onChange={set('reference')} /></label>
-      <label className="field">The quotation (PDF or photo)<input type="file" accept=".pdf,image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
-    </div>
+    <label className="field">Quotation number<input value={f.reference} onChange={set('reference')} /></label>
     <ErrorNote error={error} />
     <div className="actions"><button className="primary" disabled={busy}>{revise ? 'Save the revised quotation' : 'Add quotation'}</button></div>
   </form>;

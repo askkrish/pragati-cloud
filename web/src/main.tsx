@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { api } from './api.ts';
 import { LANG_NAMES, setLang, t, useLang } from './i18n.ts';
-import { Icon, Link, Loading, usePath } from './ui.tsx';
+import { Icon, Initials, Link, Loading, usePath } from './ui.tsx';
 import { SignIn } from './pages/SignIn.tsx';
 import { Home } from './pages/Home.tsx';
 import { PlaceView, UnitView } from './pages/Places.tsx';
@@ -16,13 +16,15 @@ import { BankList, BankView, Billing, DuesList, MoneyHome, MoneySettings, MyDues
 import { Ask, AskHistory } from './pages/Ask.tsx';
 import { GoToRef, OfflineBanner, QrLabels, SearchPage } from './pages/Search.tsx';
 import { Help } from './pages/Help.tsx';
+import { Account } from './pages/Account.tsx';
+import { RegisterImport } from './pages/Reading.tsx';
 import { startOffline } from './offline.ts';
 import { DocumentView, Library, NoticeBoard, NoticeView, Packs, PrintAnnual, PrintOwners, PrintStatement, PrintVoucher, PrintWeekly } from './pages/Notices.tsx';
 import { AssetList, AssetNew, AssetView, isStaff, Requests, RoutineList, RoutineNew, RoutineView, Today, WorkOrderNew, WorkOrders,
   WorkOrderView } from './pages/Work.tsx';
 
 export type Community = { platformName: string; brandName: string; primaryColor: string; languages: string[]; assistantName: string; assistantOn: boolean; hasLogo: boolean; isDemo: boolean };
-export type Me = { person: { id: string; name: string; phone: string }; roles: { key: string; name: string; scope: string | null }[];
+export type Me = { person: { id: string; name: string; phone: string; photo?: string | null }; roles: { key: string; name: string; scope: string | null }[];
   permissions: string[]; homes: any[]; committees: any[]; waitingForMyVote: number };
 
 const Ctx = createContext<{ community: Community; me: Me; refreshMe: () => void; refreshCommunity: () => void } | null>(null);
@@ -125,8 +127,10 @@ function Frame() {
   else if (path === '/ask/history') page = <AskHistory />;
   else if (path === '/search') page = <SearchPage />;
   else if (path === '/help') page = <Help />;
+  else if (path === '/account') page = <Account />;
   else if ((r = m(/^\/go\/([A-Za-z]{2}-\d+)$/))) page = <GoToRef refText={r[1].toUpperCase()} />;
   else if (path === '/work/qr') page = <QrLabels />;
+  else if (path === '/work/register') page = <RegisterImport />;
   else if (path === '/more') page = <MoreMenu />;
   else if (path === '/settings') page = <SettingsPage />;
   else if (path === '/settings/roles') page = <Roles />;
@@ -153,7 +157,8 @@ function Frame() {
       {community.languages.length > 1 && <select aria-label={t('Language')} value={lang} onChange={e => setLang(e.target.value)}>
         {community.languages.map(l => <option key={l} value={l}>{LANG_NAMES[l] ?? l}</option>)}
       </select>}
-      <span className="who desktop-only">{me.person.name.split(' ')[0]}</span>
+      <Link to="/account" className="who" aria-label="Your account"><Initials name={me.person.name} photo={me.person.photo} size={32} />
+        <span className="desktop-only">{me.person.name.split(' ')[0]}</span></Link>
       <button className="desktop-only" onClick={() => signOut()} style={{ minHeight: 36, padding: '6px 12px' }}>{t('Sign out')}</button>
     </header>
     <nav className="nav" aria-label="Main">

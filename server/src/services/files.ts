@@ -25,6 +25,7 @@ const ALLOWED: Record<string, string[]> = {
   document: ['application/pdf', 'image/png', 'image/jpeg'],
   notice: ['application/pdf', 'image/png', 'image/jpeg'],
   evidence: ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'],
+  avatar: ['image/jpeg', 'image/png', 'image/webp'],
 };
 
 export async function saveUpload(c: Ctx, storage: Storage, part: MultipartFile, purpose: string) {

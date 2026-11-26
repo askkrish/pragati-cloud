@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, shortDate } from '../api.ts';
 import { t, useLang } from '../i18n.ts';
 import { can, useApp } from '../main.tsx';
-import { ErrorNote, Link, Loading, navigate, PageHead, useAction, useApi } from '../ui.tsx';
+import { appendSpoken, ErrorNote, Link, Loading, navigate, PageHead, useAction, useApi, VoiceButton } from '../ui.tsx';
 
 // Switching off is rare and affects everyone, so it asks first.
 const confirmOff = () => window.confirm('Switch off the assistant for everyone in the community?');
@@ -88,7 +88,8 @@ export function Ask() {
     <form ref={end} className="ask-box" onSubmit={e => { e.preventDefault(); if (q.trim().length > 1) ask(q.trim()); }}>
       <textarea rows={2} value={q} maxLength={1000} onChange={e => setQ(e.target.value)} placeholder={turns.length ? 'Ask a follow-up' : 'Ask a question'} aria-label="Your question"
         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (q.trim().length > 1 && !busy) ask(q.trim()); } }} />
-      <button className="primary" disabled={busy || q.trim().length < 2}>{t('Ask')}</button>
+      <span className="ask-buttons"><VoiceButton compact label="Ask by speaking" onText={x => setQ(v => appendSpoken(v, x))} />
+        <button className="primary" disabled={busy || q.trim().length < 2}>{t('Ask')}</button></span>
     </form>
     <p className="quiet small">{s.remainingToday} questions left today.{turns.length > 0 && <> <button type="button" className="link" onClick={() => setTurns([])}>Start a new conversation</button></>}
       {s.canSwitch && <> <button type="button" className="link" onClick={() => { if (confirmOff()) api.patch('/api/ask/settings', { enabled: false }).then(() => location.assign('/')); }}>
@@ -121,6 +122,7 @@ function DraftRequest({ draft }: { draft: any }) {
     <p className="quiet small">Draft request for {draft.unit}{draft.permitKind ? ', needing the committee\'s permission' : ''}. Check it and send it, or change anything first.</p>
     <label className="field">What is the problem<input required minLength={3} value={f.title} onChange={e => setF({ ...f, title: e.target.value })} /></label>
     <label className="field">Details<textarea value={f.details} onChange={e => setF({ ...f, details: e.target.value })} /></label>
+    <VoiceButton onText={x => setF(v => ({ ...v, details: appendSpoken(v.details, x) }))} />
     <label className="check"><input type="checkbox" checked={f.urgent} onChange={e => setF({ ...f, urgent: e.target.checked })} />Urgent</label>
     <ErrorNote error={error} />
     <div className="actions"><button className="primary" disabled={busy}>Send request</button></div>
@@ -136,6 +138,7 @@ function AssistantOff({ status, reload }: { status: any; reload: () => void }) {
     {status.canSwitch ? <>
       <p>When it is on, owners, residents, staff and the committee can ask questions in plain words and get answers from the community's records: dues, requests, work, notices, approvals and, for those allowed, the accounts.</p>
       <p>To answer, the question and the records it needs are sent to the AI provider (Anthropic's Claude). Phone numbers, email addresses and bank details are removed first. Each person sees only what their role allows, and the AI can only read, never change anything.</p>
+      <p>Switching it on also lets staff and the treasurer have quotations, invoices and paper register pages read into their forms. The document is sent to the AI provider; the person checks every field before anything is saved.</p>
       <ErrorNote error={act.error} />
       <div className="actions"><button className="primary" disabled={act.busy} onClick={() => act.run(async () => { await api.patch('/api/ask/settings', { enabled: true }); location.reload(); })}>Switch it on</button></div>
     </> : <p>Your committee can switch it on in the app.</p>}

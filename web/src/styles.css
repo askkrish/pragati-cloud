@@ -213,6 +213,7 @@ textarea { min-height: 96px; resize: vertical; }
 .stage .body { display: grid; gap: 10px; padding-top: 3px; }
 .voters { display: flex; flex-wrap: wrap; gap: 8px; }
 .voter { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); font-size: 0.95rem; }
+.ini { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 0.78rem; font-weight: 700; background: var(--line-2); color: var(--ink-2); flex: none; line-height: 1; }
 .voter .ini { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 0.78rem; font-weight: 700; background: var(--line-2); color: var(--ink-2); }
 .voter.approve .ini { background: var(--yes); color: white; }
 .voter.object .ini { background: var(--no); color: white; }
@@ -411,6 +412,7 @@ table.voucher th { width: 30%; color: var(--ink-2); font-weight: 500; }
 .thinking { font-style: italic; }
 .ask-box { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; max-width: 760px; scroll-margin-bottom: 96px; }
 .ask-box textarea { resize: vertical; min-height: 52px; }
+.ask-buttons { display: flex; gap: 8px; align-items: center; }
 button.link { background: none; border: 0; padding: 0; color: var(--brand-ink); text-decoration: underline; font: inherit; cursor: pointer; }
 .ask-home { display: grid; gap: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
 .ask-home label { font: 700 1.05rem/1.2 var(--display); color: var(--brand-ink); }
@@ -456,3 +458,33 @@ button.link { background: none; border: 0; padding: 0; color: var(--brand-ink); 
 }
 .answer-tools { display: flex; gap: 14px; font-size: 0.9rem; padding-left: 4px; }
 .draft { max-width: 92%; border-left: 4px solid var(--brand); }
+
+/* ---------- arranging the home screen ---------- */
+.arrange-link { text-align: center; font-size: 0.92rem; }
+ol.arrange { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+ol.arrange li { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius-s); padding: 8px 10px; background: var(--paper); }
+ol.arrange li.off { opacity: 0.6; }
+ol.arrange button { min-width: 40px; }
+
+/* ---------- photos and voice ---------- */
+img.ini.photo { object-fit: cover; padding: 0; background: var(--line-2); }
+.who { display: inline-flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
+.who .ini { border: 2px solid rgba(255,255,255,0.6); background: rgba(255,255,255,0.18); color: white; }
+.photo-picker { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 8px; }
+.photo-picker .ini { width: 96px; height: 96px; font-size: 2rem; }
+.account { max-width: 680px; }
+label.button input[hidden] { display: none; }
+.voice { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.voice-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 12px; border-radius: 999px; }
+.voice-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.voice-btn.on { background: var(--stop); color: white; border-color: var(--stop); animation: pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .voice-btn.on { animation: none; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--stop) 25%, transparent); } }
+.voice-err { font-size: 0.85rem; color: var(--stop); }
+.field-with-voice { display: grid; gap: 6px; }
+
+/* ---------- reading documents and paper registers ---------- */
+.read-doc { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.register-rows { display: grid; gap: 12px; }
+.register-row legend { font-weight: 700; padding: 0 6px; }
+.register-link { margin: 0; }

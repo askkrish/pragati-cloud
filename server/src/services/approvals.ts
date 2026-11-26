@@ -169,13 +169,13 @@ async function stageTally(tx: Tx, requestId: string, stageNo: number) {
   const stage = (await one(tx, `select * from app.approval_stages where request_id = $1 and stage_no = $2`, [requestId, stageNo]))!;
   const seated = new Set(await seatedPeople(tx, stage.committee_id));
   const voters = await many(tx,
-    `select v.person_id, p.full_name, x.vote, x.note, x.voted_at
+    `select v.person_id, p.full_name, p.photo_file_id, x.vote, x.note, x.voted_at
        from app.approval_stage_voters v
        join app.people p on p.tenant_id = v.tenant_id and p.id = v.person_id
        left join app.approval_votes x on x.tenant_id = v.tenant_id and x.request_id = v.request_id
                                      and x.stage_no = v.stage_no and x.person_id = v.person_id
       where v.request_id = $1 and v.stage_no = $2 order by p.full_name`, [requestId, stageNo]);
-  const rows = voters.map(v => ({ personId: v.person_id, name: v.full_name, vote: v.vote ?? null, note: v.note ?? '',
+  const rows = voters.map(v => ({ personId: v.person_id, name: v.full_name, photo: v.photo_file_id ?? null, vote: v.vote ?? null, note: v.note ?? '',
     votedAt: v.voted_at ?? null, active: seated.has(v.person_id) }));
   const active = rows.filter(r => r.active);
   const approvals = active.filter(r => r.vote === 'approve').length;
